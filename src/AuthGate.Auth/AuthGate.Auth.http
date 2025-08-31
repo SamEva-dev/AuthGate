@@ -1,0 +1,6 @@
+@AuthGate.Auth_HostAddress = http://localhost:5202
+
+GET {{AuthGate.Auth_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

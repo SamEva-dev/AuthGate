@@ -1,36 +1,63 @@
-# This is a basic workflow to help you get started with Actions
-
-name: CI
-
-# Controls when the workflow will run
+name: deploy-dev
 on:
-  # Triggers the workflow on push or pull request events but only for the "main" branch
   push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
-
-  # Allows you to run this workflow manually from the Actions tab
+    branches: [ main ]        # ou feature/dev
   workflow_dispatch:
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+env:
+  IMAGE_NAME: authgate/auth   # repo ACR (ex: authgate/auth)
+  IMAGE_TAG: dev-${{ github.sha }}
+
 jobs:
-  # This workflow contains a single job called "build"
-  build:
-    # The type of runner that the job will run on
+  build-push-deploy:
     runs-on: ubuntu-latest
+    environment: dev   # 🔒 lie ce job à l'env GitHub "dev"
+    permissions:
+      id-token: write  # OIDC
+      contents: read
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      # Runs a single command using the runners shell
-      - name: Run a one-line script
-        run: echo Hello, world!
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      # Runs a set of commands using the runners shell
-      - name: Run a multi-line script
-        run: |
-          echo Add other actions to build,
-          echo test, and deploy your project.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: ACR login (via Azure CLI context)
+        run: az acr login --name ${{ secrets.ACR_LOGIN_SERVER }}
+
+      - name: Build & push image to ACR
+        uses: docker/build-push-action@v6
+        with:
+          context: ./src/AuthGate.Auth
+          file: ./src/AuthGate.Auth/Dockerfile
+          push: true
+          platforms: linux/amd64   # tu peux ajouter arm64 plus tard
+          tags: |
+            ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+            ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:dev-latest
+
+      - name: Azure CLI - deploy to Container Apps
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            az extension add --name containerapp --upgrade
+            az containerapp update \
+              --name ${{ secrets.CONTAINERAPP_NAME }} \
+              --resource-group ${{ secrets.RESOURCE_GROUP }} \
+              --image ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
+              --set-env-vars ASPNETCORE_URLS=http://+:8080
+
+      - name: Show public URL
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            FQDN=$(az containerapp show -g ${{ secrets.RESOURCE_GROUP }} -n ${{ secrets.CONTAINERAPP_NAME }} --query properties.configuration.ingress.fqdn -o tsv)
+            echo "App URL: https://$FQDN"

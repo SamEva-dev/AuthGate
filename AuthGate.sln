@@ -1,0 +1,44 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.13.35931.197
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AuthGate.Auth", "src\AuthGate.Auth\AuthGate.Auth.csproj", "{8C35C589-A6DA-4874-B44F-134F23548A9C}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{02EA681E-C7D8-13C7-8484-4AC65E1B71E8}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "deploy", "deploy", "{B8574CA3-8EE2-4D33-B33E-F498DCFADACF}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "compose", "compose", "{F2C032E5-FAF7-4007-BF60-321278B87614}"
+	ProjectSection(SolutionItems) = preProject
+		docker-compose.yml = docker-compose.yml
+	EndProjectSection
+EndProject
+Project("{E53339B2-1760-4266-BCC7-CA923CBCF16C}") = "docker-compose", "docker-compose.dcproj", "{81DDED9D-158B-E303-5F62-77A2896D2A5A}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{8C35C589-A6DA-4874-B44F-134F23548A9C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8C35C589-A6DA-4874-B44F-134F23548A9C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8C35C589-A6DA-4874-B44F-134F23548A9C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8C35C589-A6DA-4874-B44F-134F23548A9C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{81DDED9D-158B-E303-5F62-77A2896D2A5A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{81DDED9D-158B-E303-5F62-77A2896D2A5A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{81DDED9D-158B-E303-5F62-77A2896D2A5A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{81DDED9D-158B-E303-5F62-77A2896D2A5A}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{8C35C589-A6DA-4874-B44F-134F23548A9C} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
+		{F2C032E5-FAF7-4007-BF60-321278B87614} = {B8574CA3-8EE2-4D33-B33E-F498DCFADACF}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {838CCC5B-21F2-4505-BCEC-E0AF1D3749D3}
+	EndGlobalSection
+EndGlobal

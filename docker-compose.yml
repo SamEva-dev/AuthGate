@@ -1,0 +1,6 @@
+services:
+  authgate.auth:
+    image: ${DOCKER_REGISTRY-}authgateauth
+    build:
+      context: .
+      dockerfile: src/AuthGate.Auth/Dockerfile
