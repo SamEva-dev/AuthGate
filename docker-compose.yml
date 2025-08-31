@@ -4,3 +4,10 @@ services:
     build:
       context: .
       dockerfile: src/AuthGate.Auth/Dockerfile
+
+  authgate.mgmt:
+    image: ${DOCKER_REGISTRY-}authgatemgmt
+    build:
+      context: src/AuthGate.Mgmt
+      dockerfile: Dockerfile
+

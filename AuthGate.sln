@@ -14,6 +14,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "compose", "compose", "{F2C0
 		docker-compose.yml = docker-compose.yml
 	EndProjectSection
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AuthGate.Mgmt", "src\AuthGate.Mgmt\AuthGate.Mgmt.csproj", "{87671FB9-2A36-6322-82AA-0383974129FB}"
+EndProject
 Project("{E53339B2-1760-4266-BCC7-CA923CBCF16C}") = "docker-compose", "docker-compose.dcproj", "{81DDED9D-158B-E303-5F62-77A2896D2A5A}"
 EndProject
 Global
@@ -26,6 +28,10 @@ Global
 		{8C35C589-A6DA-4874-B44F-134F23548A9C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{8C35C589-A6DA-4874-B44F-134F23548A9C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{8C35C589-A6DA-4874-B44F-134F23548A9C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{87671FB9-2A36-6322-82AA-0383974129FB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{87671FB9-2A36-6322-82AA-0383974129FB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{87671FB9-2A36-6322-82AA-0383974129FB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{87671FB9-2A36-6322-82AA-0383974129FB}.Release|Any CPU.Build.0 = Release|Any CPU
 		{81DDED9D-158B-E303-5F62-77A2896D2A5A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{81DDED9D-158B-E303-5F62-77A2896D2A5A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{81DDED9D-158B-E303-5F62-77A2896D2A5A}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -37,6 +43,7 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{8C35C589-A6DA-4874-B44F-134F23548A9C} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 		{F2C032E5-FAF7-4007-BF60-321278B87614} = {B8574CA3-8EE2-4D33-B33E-F498DCFADACF}
+		{87671FB9-2A36-6322-82AA-0383974129FB} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {838CCC5B-21F2-4505-BCEC-E0AF1D3749D3}
