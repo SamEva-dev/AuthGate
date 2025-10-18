@@ -1,36 +1,82 @@
-var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddHealthChecks();
+using Serilog;
+using SerilogTracing;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
+using AuthGate.Auth.Presentation;
+using AuthGate.Auth;
 
-// Add services to the container.
+var configurationBuilder = new ConfigurationBuilder()
+                .AddEnvironmentVariables()
+                .AddJsonFile("appsettings.json", false, true);
 
-builder.Services.AddControllers();
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
+IConfiguration configuration = configurationBuilder.Build();
 
-var app = builder.Build();
+Log.Logger = new LoggerConfiguration()
+    .Enrich.FromLogContext()
+    .Enrich.WithThreadId()
+    .Enrich.WithProperty("MachineName", Environment.MachineName)
+    .WriteTo.Console()
+    .ReadFrom.Configuration(configuration)
+    .Filter.ByExcluding(evt =>
+        evt.Properties.ContainsKey("transcriptPath") ||
+        evt.Properties.ContainsKey("audioPath") ||
+        evt.Properties.ContainsKey("summaryPath")
+    )
+    .CreateLogger();
 
-app.MapGet("/", () => Results.Json(new
-{
-    name = "AuthGate.Auth",
-    status = "ok",
-    version = typeof(Program).Assembly.GetName().Version?.ToString() ?? "unknown"
-}));
+using var listener = new ActivityListenerConfiguration()
+    .Instrument.AspNetCoreRequests()
+    .TraceToSharedLogger();
+if (!Directory.Exists("Data")) Directory.CreateDirectory("Data");
 
 
-app.MapHealthChecks("/health/live");
-app.MapHealthChecks("/health/ready");
+Log.Information("*** STARTUP ***");
+var requiredPythonLibs = new[] { "torch",
+                                "faster-whisper",
+                                "pyannote.audio",
+                                "sentencepiece",
+                                "python-multipart",
+                                "pydantic",
+                                "langdetect"};
 
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.MapOpenApi();
-}
 
-app.UseHttpsRedirection();
+var host = Host.CreateDefaultBuilder(args)
+            .ConfigureServices((context, services) =>
+            {
+                services.AddSingleton(configuration!);
+                if (configuration == null)
+                {
+                    throw new InvalidOperationException("Configuration not initialized");
+                }
+                //services.AddApplication();
+               // services.AddInfrastructure(configuration);
+            })
+            .ConfigureLogging(logger =>
+            {
+                logger.ClearProviders();
+                logger.AddConsole();
+                logger.AddSerilog(dispose: true);
+            })
+            .ConfigureWebHostDefaults(webBuilder =>
+            {
+                webBuilder.ConfigureKestrel(options =>
+                {
+                    options.ListenAnyIP(5001, listenOptions =>
+                    {
+                        listenOptions.UseHttps();
+                        listenOptions.Protocols = HttpProtocols.Http1AndHttp2;
+                    });
 
-app.UseAuthorization();
+                    options.ListenAnyIP(5000, listenOptions =>
+                    {
+                        listenOptions.Protocols = HttpProtocols.Http1AndHttp2;
+                    });
+                });
+                webBuilder.UseStartup<Startup>();
+            })
+            .UseSerilog()
+            .Build();
 
-app.MapControllers();
+//host.ApplyMigrations();
 
-app.Run();
+host.Run();
