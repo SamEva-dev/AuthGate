@@ -51,7 +51,7 @@ public class Startup
             {
                 options.AddPolicy("CorsPolicy", builder =>
                     builder
-                        .WithOrigins("http://localhost:4200")
+                        .WithOrigins(Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>())
                         .AllowAnyMethod()
                         .AllowAnyHeader()
                         .AllowCredentials());
@@ -100,13 +100,22 @@ public class Startup
             app.UseHttpsRedirection();
 
             app.UseSerilogRequestLogging(); // log de toutes les requêtes HTTP
+           
 
-            app.UseRouting();
+        app.UseRouting();
             app.UseAuthentication();
             app.UseAuthorization();
 
             app.UseEndpoints(endpoints =>
             {
+                endpoints.MapGet("/", () => Results.Json(new
+                {
+                    name = "AuthGate.Auth",
+                    status = "ok",
+                    version = typeof(Program).Assembly.GetName().Version?.ToString() ?? "unknown"
+                }));
+              // endpoints.MapHealthChecks("/health/live");
+               //endpoints.MapHealthChecks("/health/ready");
                 endpoints.MapControllers();
                 // endpoints.MapHub<SessionHub>("/hubs/sessions");
             });

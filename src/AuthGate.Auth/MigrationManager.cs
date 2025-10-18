@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using AuthGate.Auth.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Serilog;
@@ -10,7 +11,7 @@ namespace AuthGate.Auth
         public static IHost ApplyMigrations(this IHost host)
         {
             using var scope = host.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<DbContext>();
+            var db = scope.ServiceProvider.GetRequiredService<AuthGateDbContext>();
             try
             {
                 db.Database.Migrate();

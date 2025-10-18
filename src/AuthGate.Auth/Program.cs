@@ -3,6 +3,7 @@ using SerilogTracing;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using AuthGate.Auth.Presentation;
 using AuthGate.Auth;
+using AuthGate.Auth.Infrastructure;
 
 var configurationBuilder = new ConfigurationBuilder()
                 .AddEnvironmentVariables()
@@ -49,7 +50,7 @@ var host = Host.CreateDefaultBuilder(args)
                     throw new InvalidOperationException("Configuration not initialized");
                 }
                 //services.AddApplication();
-               // services.AddInfrastructure(configuration);
+               services.AddInfrastructure(configuration);
             })
             .ConfigureLogging(logger =>
             {
@@ -77,6 +78,6 @@ var host = Host.CreateDefaultBuilder(args)
             .UseSerilog()
             .Build();
 
-//host.ApplyMigrations();
+host.ApplyMigrations();
 
 host.Run();
