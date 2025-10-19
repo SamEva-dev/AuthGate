@@ -10,6 +10,11 @@ using System.Text.Json;
 using System;
 using Serilog;
 using AuthGate.Auth.Presentation.Extensions;
+using CorrelationId.DependencyInjection;
+using CorrelationId;
+using AuthGate.Auth.Presentation.Middleware;
+using AuthGate.Auth.Presentation.Security;
+using Microsoft.AspNetCore.Authorization;
 
 public class Startup
     {
@@ -74,10 +79,23 @@ public class Startup
                     };
                 });
 
-            services.AddAuthorization();
-            services.AddSignalR();
+        services.AddAuthorization();
+        services.AddSignalR();
+        services.AddDefaultCorrelationId(options =>
+        {
+            options.AddToLoggingScope = true;
+            options.EnforceHeader = false;
+            options.IgnoreRequestHeader = false;
+            options.IncludeInResponse = true;
+            options.RequestHeader = "X-Correlation-ID";
+            options.ResponseHeader = "X-Correlation-ID";
+        });
 
-        }
+    services.AddScoped<IAuthorizationHandler, HasPermissionHandler>();
+    // Policy provider must be registered as singleton; the provider will create scopes when it needs DB access
+    services.AddSingleton<IAuthorizationPolicyProvider, DynamicPermissionPolicyProvider>();
+
+    }
 
         public void Configure(IApplicationBuilder app, IHostEnvironment env, IApiVersionDescriptionProvider provider)
         {
@@ -99,25 +117,37 @@ public class Startup
 
             app.UseHttpsRedirection();
 
-            app.UseSerilogRequestLogging(); // log de toutes les requêtes HTTP
-           
+       
+
+        app.UseCorrelationId();
+        app.UseSerilogRequestLogging(); // log de toutes les requêtes HTTP
+        app.Use(async (context, next) =>
+        {
+            var userId = context.User?.FindFirst("sub")?.Value;
+            if (!string.IsNullOrEmpty(userId))
+            {
+                Serilog.Context.LogContext.PushProperty("UserId", userId);
+            }
+            await next();
+        });
+        app.UseMiddleware<RequestLoggingMiddleware>();
 
         app.UseRouting();
-            app.UseAuthentication();
-            app.UseAuthorization();
+        app.UseAuthentication();
+        app.UseAuthorization();
 
-            app.UseEndpoints(endpoints =>
+        app.UseEndpoints(endpoints =>
+        {
+            endpoints.MapGet("/", () => Results.Json(new
             {
-                endpoints.MapGet("/", () => Results.Json(new
-                {
-                    name = "AuthGate.Auth",
-                    status = "ok",
-                    version = typeof(Program).Assembly.GetName().Version?.ToString() ?? "unknown"
-                }));
-              // endpoints.MapHealthChecks("/health/live");
-               //endpoints.MapHealthChecks("/health/ready");
-                endpoints.MapControllers();
-                // endpoints.MapHub<SessionHub>("/hubs/sessions");
-            });
-        }
+                name = "AuthGate.Auth",
+                status = "ok",
+                version = typeof(Program).Assembly.GetName().Version?.ToString() ?? "unknown"
+            }));
+            // endpoints.MapHealthChecks("/health/live");
+            //endpoints.MapHealthChecks("/health/ready");
+            endpoints.MapControllers();
+            // endpoints.MapHub<SessionHub>("/hubs/sessions");
+        });
     }
+}

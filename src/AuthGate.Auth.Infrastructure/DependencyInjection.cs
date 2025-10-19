@@ -1,6 +1,9 @@
 ﻿using AuthGate.Auth.Application.Interfaces;
+using AuthGate.Auth.Application.Interfaces.Repositories;
+using AuthGate.Auth.Application.Services;
 using AuthGate.Auth.Infrastructure.Identity;
 using AuthGate.Auth.Infrastructure.Persistence;
+using AuthGate.Auth.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -19,6 +22,16 @@ namespace AuthGate.Auth.Infrastructure
             services.AddScoped<IPasswordHasher, PasswordHasher>();
             services.AddScoped<IMfaService, MfaService>();
             services.AddScoped<IEmailService, EmailService>();
+
+            services.AddScoped<IAuthRepository, AuthRepository>();
+            services.AddScoped<IUnitOfWork, UnitOfWork>();
+            services.AddScoped<IAuditRepository, AuditRepository>();
+            services.AddScoped<IAuditService, AuditService>();
+            services.AddScoped<IRoleRepository, RoleRepository>();
+            services.AddScoped<IPermissionRepository, PermissionRepository>();
+            services.AddScoped<IMfaService, MfaService>();
+
+
 
             return services;
         }

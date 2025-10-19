@@ -10,9 +10,14 @@ public class User
     public bool IsEmailValidated { get; set; }
     public bool MfaEnabled { get; set; }
     public string? MfaSecret { get; set; }
+    public DateTime? MfaActivatedAtUtc { get; set; }
     public bool IsLocked { get; set; }
     public DateTime? LockoutEndUtc { get; set; }
 
+    public bool IsDeleted { get; set; } = false;
+
     public ICollection<DeviceSession> DeviceSessions { get; set; } = new List<DeviceSession>();
     public ICollection<UserLoginAttempt> LoginAttempts { get; set; } = new List<UserLoginAttempt>();
+    public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
+
 }

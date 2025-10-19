@@ -1,7 +1,9 @@
 ﻿using Asp.Versioning;
+using AuthGate.Auth.Application.Features.Devices;
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace AuthGate.Auth.Presentation.Controllers;
 
@@ -11,24 +13,50 @@ namespace AuthGate.Auth.Presentation.Controllers;
 [Authorize]
 public class DevicesController : ControllerBase
 {
+    private readonly ISender _mediator;
+    private readonly ILogger<DevicesController> _logger;
+
+    public DevicesController(ISender mediator, ILogger<DevicesController> logger)
+    {
+        _mediator = mediator;
+        _logger = logger;
+    }
+
     [HttpGet]
     public async Task<IActionResult> List()
     {
-        // TODO: list device sessions for current user
-        return Ok(Array.Empty<object>());
+        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub")!);
+
+        var query = new ListDevicesQuery(userId);
+        var res = await _mediator.Send(query);
+        return Ok(res);
     }
 
     [HttpDelete("{id:guid}")]
-    public async Task<IActionResult> RevokeOne(Guid id)
+    public async Task<IActionResult> RevokeOne(Guid id, [FromServices] RevokeOneDeviceCommand command)
     {
-        // TODO: revoke device session id (not current)
+        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub")!);
+        var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+        command.SetIp(ip);
+        command.SetUserId(userId);
+
+        await _mediator.Send(command);
+
         return NoContent();
     }
 
-    [HttpDelete]
-    public async Task<IActionResult> RevokeAllButCurrent()
+    [HttpDelete("others/{currentId:guid}")]
+    public async Task<IActionResult> RevokeOthers(Guid currentId, [FromServices] RevokeOthersDeviceCommand command)
     {
-        // TODO: revoke all except current device
+        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub")!);
+        var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+        command.SetIp(ip);
+        command.SetUserId(userId);
+
+        await _mediator.Send(command);
+
         return NoContent();
     }
 }

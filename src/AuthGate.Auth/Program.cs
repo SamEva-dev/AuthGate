@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Server.Kestrel.Core;
 using AuthGate.Auth.Presentation;
 using AuthGate.Auth;
 using AuthGate.Auth.Infrastructure;
+using AuthGate.Auth.Application;
+using static Org.BouncyCastle.Math.EC.ECCurve;
 
 var configurationBuilder = new ConfigurationBuilder()
                 .AddEnvironmentVariables()
@@ -16,6 +18,13 @@ Log.Logger = new LoggerConfiguration()
     .Enrich.WithThreadId()
     .Enrich.WithProperty("MachineName", Environment.MachineName)
     .WriteTo.Console()
+  // .WriteTo.File("logs/authgate-.log", rollingInterval: RollingInterval.Day)
+    .WriteTo.SQLite(
+        sqliteDbPath: $"Data Source={configuration.GetConnectionString("Audit")};",
+        tableName: "Logs",
+        storeTimestampInUtc: true)
+     .Enrich.WithEnvironmentUserName()
+     .Enrich.WithClientIp()
     .ReadFrom.Configuration(configuration)
     .Filter.ByExcluding(evt =>
         evt.Properties.ContainsKey("transcriptPath") ||
@@ -49,7 +58,7 @@ var host = Host.CreateDefaultBuilder(args)
                 {
                     throw new InvalidOperationException("Configuration not initialized");
                 }
-                //services.AddApplication();
+                services.AddApplication();
                services.AddInfrastructure(configuration);
             })
             .ConfigureLogging(logger =>

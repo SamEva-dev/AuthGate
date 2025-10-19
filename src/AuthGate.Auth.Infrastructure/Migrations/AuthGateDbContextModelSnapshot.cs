@@ -23,6 +23,9 @@ namespace AuthGate.Auth.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime>("ExpiresAtUtc")
                         .HasColumnType("TEXT");
 
@@ -34,6 +37,9 @@ namespace AuthGate.Auth.Infrastructure.Migrations
                     b.Property<string>("RefreshToken")
                         .IsRequired()
                         .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ReplacedByToken")
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("RevokedAtUtc")
@@ -55,6 +61,95 @@ namespace AuthGate.Auth.Infrastructure.Migrations
                     b.ToTable("DeviceSessions");
                 });
 
+            modelBuilder.Entity("AuthGate.Auth.Domain.Entities.PasswordResetToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("IpAddress")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("UsedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserAgent")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Token")
+                        .IsUnique();
+
+                    b.ToTable("PasswordResetTokens");
+                });
+
+            modelBuilder.Entity("AuthGate.Auth.Domain.Entities.Permission", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Permissions");
+                });
+
+            modelBuilder.Entity("AuthGate.Auth.Domain.Entities.Role", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Roles");
+                });
+
+            modelBuilder.Entity("AuthGate.Auth.Domain.Entities.RolePermission", b =>
+                {
+                    b.Property<Guid>("RoleId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("PermissionId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("RoleId", "PermissionId");
+
+                    b.HasIndex("PermissionId");
+
+                    b.ToTable("RolePermissions");
+                });
+
             modelBuilder.Entity("AuthGate.Auth.Domain.Entities.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -71,6 +166,9 @@ namespace AuthGate.Auth.Infrastructure.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("INTEGER");
+
                     b.Property<bool>("IsEmailValidated")
                         .HasColumnType("INTEGER");
 
@@ -78,6 +176,9 @@ namespace AuthGate.Auth.Infrastructure.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<DateTime?>("LockoutEndUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("MfaActivatedAtUtc")
                         .HasColumnType("TEXT");
 
                     b.Property<bool>("MfaEnabled")
@@ -131,6 +232,21 @@ namespace AuthGate.Auth.Infrastructure.Migrations
                     b.ToTable("UserLoginAttempts");
                 });
 
+            modelBuilder.Entity("AuthGate.Auth.Domain.Entities.UserRole", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("RoleId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("UserId", "RoleId");
+
+                    b.HasIndex("RoleId");
+
+                    b.ToTable("UserRoles");
+                });
+
             modelBuilder.Entity("AuthGate.Auth.Domain.Entities.DeviceSession", b =>
                 {
                     b.HasOne("AuthGate.Auth.Domain.Entities.User", null)
@@ -140,6 +256,25 @@ namespace AuthGate.Auth.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("AuthGate.Auth.Domain.Entities.RolePermission", b =>
+                {
+                    b.HasOne("AuthGate.Auth.Domain.Entities.Permission", "Permission")
+                        .WithMany("RolePermissions")
+                        .HasForeignKey("PermissionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("AuthGate.Auth.Domain.Entities.Role", "Role")
+                        .WithMany("RolePermissions")
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Permission");
+
+                    b.Navigation("Role");
+                });
+
             modelBuilder.Entity("AuthGate.Auth.Domain.Entities.UserLoginAttempt", b =>
                 {
                     b.HasOne("AuthGate.Auth.Domain.Entities.User", null)
@@ -147,11 +282,44 @@ namespace AuthGate.Auth.Infrastructure.Migrations
                         .HasForeignKey("UserId");
                 });
 
+            modelBuilder.Entity("AuthGate.Auth.Domain.Entities.UserRole", b =>
+                {
+                    b.HasOne("AuthGate.Auth.Domain.Entities.Role", "Role")
+                        .WithMany("UserRoles")
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("AuthGate.Auth.Domain.Entities.User", "User")
+                        .WithMany("UserRoles")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Role");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("AuthGate.Auth.Domain.Entities.Permission", b =>
+                {
+                    b.Navigation("RolePermissions");
+                });
+
+            modelBuilder.Entity("AuthGate.Auth.Domain.Entities.Role", b =>
+                {
+                    b.Navigation("RolePermissions");
+
+                    b.Navigation("UserRoles");
+                });
+
             modelBuilder.Entity("AuthGate.Auth.Domain.Entities.User", b =>
                 {
                     b.Navigation("DeviceSessions");
 
                     b.Navigation("LoginAttempts");
+
+                    b.Navigation("UserRoles");
                 });
 #pragma warning restore 612, 618
         }

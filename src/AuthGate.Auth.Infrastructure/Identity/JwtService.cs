@@ -28,6 +28,12 @@ public class JwtService : IJwtService
             new("mfa", user.MfaEnabled.ToString())
         };
 
+        var roles = user.UserRoles?.Select(ur => ur.Role?.Name).Where(r => r != null);
+        if (roles != null)
+        {
+            claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role!)));
+        }
+
         var token = new JwtSecurityToken(claims: claims, expires: expires, signingCredentials: creds);
         var access = new JwtSecurityTokenHandler().WriteToken(token);
         var refresh = Guid.NewGuid().ToString("N");
