@@ -71,13 +71,13 @@ var host = Host.CreateDefaultBuilder(args)
             {
                 webBuilder.ConfigureKestrel(options =>
                 {
-                    options.ListenAnyIP(5001, listenOptions =>
+                    options.ListenAnyIP(8081, listenOptions =>
                     {
                         listenOptions.UseHttps();
                         listenOptions.Protocols = HttpProtocols.Http1AndHttp2;
                     });
 
-                    options.ListenAnyIP(5000, listenOptions =>
+                    options.ListenAnyIP(8080, listenOptions =>
                     {
                         listenOptions.Protocols = HttpProtocols.Http1AndHttp2;
                     });
