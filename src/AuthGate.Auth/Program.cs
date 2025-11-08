@@ -1,11 +1,13 @@
 using Serilog;
 using SerilogTracing;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
-using AuthGate.Auth.Presentation;
 using AuthGate.Auth;
 using AuthGate.Auth.Infrastructure;
 using AuthGate.Auth.Application;
-using static Org.BouncyCastle.Math.EC.ECCurve;
+using AuthGate.Auth.Domain.Entities;
+using Microsoft.AspNetCore.Identity;
+using AuthGate.Auth.Infrastructure.Persistence;
+using AuthGate.Auth.Infrastructure;
 
 var configurationBuilder = new ConfigurationBuilder()
                 .AddEnvironmentVariables()
@@ -59,7 +61,32 @@ var host = Host.CreateDefaultBuilder(args)
                     throw new InvalidOperationException("Configuration not initialized");
                 }
                 services.AddApplication();
-               services.AddInfrastructure(configuration);
+                services.AddInfrastructure(configuration);
+                services
+                    .AddIdentityCore<User>(options =>
+                    {
+                        // Password settings
+                        options.Password.RequireDigit = true;
+                        options.Password.RequireLowercase = true;
+                        options.Password.RequireUppercase = true;
+                        options.Password.RequireNonAlphanumeric = true;
+                        options.Password.RequiredLength = 8;
+
+                        // Lockout settings
+                        options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+                        options.Lockout.MaxFailedAccessAttempts = 5;
+                        options.Lockout.AllowedForNewUsers = true;
+
+                        // User settings
+                        options.User.RequireUniqueEmail = true;
+
+                        // SignIn settings
+                        options.SignIn.RequireConfirmedEmail = false;
+                        options.SignIn.RequireConfirmedAccount = false;
+                    })
+                    .AddRoles<Role>() // ? Ajoute la gestion des rôles ici
+                    .AddEntityFrameworkStores<AuthDbContext>() // ? ton DbContext
+                    .AddDefaultTokenProviders().AddSignInManager();
             })
             .ConfigureLogging(logger =>
             {

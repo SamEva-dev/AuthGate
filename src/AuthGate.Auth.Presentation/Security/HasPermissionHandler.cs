@@ -1,4 +1,4 @@
-﻿using AuthGate.Auth.Application.Interfaces.Repositories;
+using AuthGate.Auth.Domain.Repositories;
 using Microsoft.AspNetCore.Authorization;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -32,11 +32,11 @@ public class HasPermissionHandler : AuthorizationHandler<HasPermissionRequiremen
             return;
         }
 
-        // Vérifie si l’utilisateur a un rôle possédant la permission
+        // Vérifie si l'utilisateur a un rôle possédant la permission
         var userGuid = Guid.Parse(userId);
-        var user = await _uow.Auth.GetByIdAsync(userGuid);
+        var user = await _uow.Users.GetByIdWithRolesAndPermissionsAsync(userGuid);
 
-        if (user?.UserRoles is null || user.IsDeleted)
+        if (user is null || !user.IsActive)
         {
             _logger.LogWarning("Permission check failed: user {UserId} not found.", userId);
             context.Fail();
@@ -44,8 +44,8 @@ public class HasPermissionHandler : AuthorizationHandler<HasPermissionRequiremen
         }
 
         var hasPermission = user.UserRoles
-            .SelectMany(ur => ur.Role!.RolePermissions)
-            .Any(rp => rp.Permission!.Code == requirement.PermissionCode);
+            .SelectMany(ur => ur.Role.RolePermissions)
+            .Any(rp => rp.Permission.Code == requirement.PermissionCode);
 
         if (hasPermission)
         {

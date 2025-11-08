@@ -1,11 +1,31 @@
-﻿
+using AuthGate.Auth.Domain.Common;
+
 namespace AuthGate.Auth.Domain.Entities;
 
-public class RolePermission
+/// <summary>
+/// Represents the many-to-many relationship between roles and permissions
+/// </summary>
+public class RolePermission : BaseEntity
 {
-    public Guid RoleId { get; set; }
-    public Guid PermissionId { get; set; }
+    /// <summary>
+    /// Gets or sets the role ID
+    /// </summary>
+    public required Guid RoleId { get; set; }
 
-    public Role? Role { get; set; }
-    public Permission? Permission { get; set; }
+    /// <summary>
+    /// Gets or sets the permission ID
+    /// </summary>
+    public required Guid PermissionId { get; set; }
+
+    // Navigation properties
+
+    /// <summary>
+    /// Gets or sets the role
+    /// </summary>
+    public virtual Role Role { get; set; } = null!;
+
+    /// <summary>
+    /// Gets or sets the permission
+    /// </summary>
+    public virtual Permission Permission { get; set; } = null!;
 }

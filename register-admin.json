@@ -1,0 +1,7 @@
+{
+  "email": "admin@authgate.com",
+  "password": "Admin@123",
+  "confirmPassword": "Admin@123",
+  "firstName": "Admin",
+  "lastName": "User"
+}

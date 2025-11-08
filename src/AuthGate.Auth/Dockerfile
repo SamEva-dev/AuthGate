@@ -1,29 +1,44 @@
-# See https://aka.ms/customizecontainer to learn how to customize your debug container and how Visual Studio uses this Dockerfile to build your images for faster debugging.
-
-# This stage is used when running from VS in fast mode (Default for Debug configuration)
+###########
+# Runtime #
+###########
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS base
-USER $APP_UID
 WORKDIR /app
 EXPOSE 8080
 EXPOSE 8081
+ENV ASPNETCORE_URLS=http://+:8080
 
-
-# This stage is used to build the service project
+#########
+# Build #
+#########
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
-COPY ["src/AuthGate.Auth/AuthGate.Auth.csproj", "src/AuthGate.Auth/"]
-RUN dotnet restore "./src/AuthGate.Auth/AuthGate.Auth.csproj"
-COPY . .
-WORKDIR "/src/src/AuthGate.Auth"
-RUN dotnet build "./AuthGate.Auth.csproj" -c $BUILD_CONFIGURATION -o /app/build
 
-# This stage is used to publish the service project to be copied to the final stage
+# Copy solution and project files for better restore caching
+COPY ["./AuthGate.sln", "./"]
+COPY ["src/AuthGate.Auth/AuthGate.Auth.csproj", "src/AuthGate.Auth/"]
+COPY ["src/AuthGate.Auth.Application/AuthGate.Auth.Application.csproj", "src/AuthGate.Auth.Application/"]
+COPY ["src/AuthGate.Auth.Domain/AuthGate.Auth.Domain.csproj", "src/AuthGate.Auth.Domain/"]
+COPY ["src/AuthGate.Auth.Infrastructure/AuthGate.Auth.Infrastructure.csproj", "src/AuthGate.Auth.Infrastructure/"]
+
+RUN dotnet restore "./AuthGate.sln"
+
+# Copy the rest of the source
+COPY . .
+
+WORKDIR "/src/src/AuthGate.Auth"
+RUN dotnet build "./AuthGate.Auth.csproj" -c ${BUILD_CONFIGURATION} -o /app/build
+
+###########
+# Publish #
+###########
 FROM build AS publish
 ARG BUILD_CONFIGURATION=Release
-RUN dotnet publish "./AuthGate.Auth.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "./AuthGate.Auth.csproj" -c ${BUILD_CONFIGURATION} -o /app/publish /p:UseAppHost=false
 
-# This stage is used in production or when running from VS in regular mode (Default when not using the Debug configuration)
+###########
+# Final   #
+###########
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .

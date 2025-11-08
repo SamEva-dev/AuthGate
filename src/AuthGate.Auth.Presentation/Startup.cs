@@ -142,7 +142,7 @@ public class Startup
             {
                 name = "AuthGate.Auth",
                 status = "ok",
-                version = typeof(Program).Assembly.GetName().Version?.ToString() ?? "unknown"
+                //version = typeof(Program).Assembly.GetName().Version?.ToString() ?? "unknown"
             }));
             // endpoints.MapHealthChecks("/health/live");
             //endpoints.MapHealthChecks("/health/ready");

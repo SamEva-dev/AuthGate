@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <PackageReference Include="CorrelationId" Version="3.0.1" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.10" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.4" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="9.0.10" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="9.0.10">
@@ -31,12 +32,12 @@
     <PackageReference Include="SerilogTracing" Version="2.3.1" />
     <PackageReference Include="SerilogTracing.Expressions" Version="2.3.1" />
     <PackageReference Include="SerilogTracing.Instrumentation.AspNetCore" Version="2.3.1" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="9.0.6" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\AuthGate.Auth.Application\AuthGate.Auth.Application.csproj" />
     <ProjectReference Include="..\AuthGate.Auth.Infrastructure\AuthGate.Auth.Infrastructure.csproj" />
-    <ProjectReference Include="..\AuthGate.Auth.Presentation\AuthGate.Auth.Presentation.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,4 +1,4 @@
-﻿using AuthGate.Auth.Application.Interfaces.Repositories;
+using AuthGate.Auth.Domain.Repositories;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
