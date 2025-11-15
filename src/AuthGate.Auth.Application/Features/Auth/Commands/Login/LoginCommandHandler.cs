@@ -99,7 +99,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<LoginRes
 
             // Generate tokens
             _logger.LogDebug("Generating access token");
-            var accessToken = _jwtService.GenerateAccessToken(user.Id, user.Email!, roles, permissions, user.MfaEnabled);
+            var accessToken = _jwtService.GenerateAccessToken(user.Id, user.Email!, roles, permissions, user.MfaEnabled, user.TenantId);
             _logger.LogDebug("Generating refresh token");
             var refreshToken = _jwtService.GenerateRefreshToken();
             _logger.LogDebug("Extracting JWT ID");

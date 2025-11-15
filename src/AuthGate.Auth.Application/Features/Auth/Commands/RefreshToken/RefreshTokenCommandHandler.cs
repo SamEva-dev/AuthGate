@@ -93,7 +93,7 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, R
         var roles = await _userRoleService.GetUserRolesAsync(user);
         var permissions = await _userRoleService.GetUserPermissionsAsync(user);
 
-        var newAccessToken = _jwtService.GenerateAccessToken(user.Id, user.Email!, roles, permissions, user.MfaEnabled);
+        var newAccessToken = _jwtService.GenerateAccessToken(user.Id, user.Email!, roles, permissions, user.MfaEnabled, user.TenantId);
         var newRefreshToken = _jwtService.GenerateRefreshToken();
         var jwtId = _jwtService.GetJwtId(newAccessToken) ?? Guid.NewGuid().ToString();
 

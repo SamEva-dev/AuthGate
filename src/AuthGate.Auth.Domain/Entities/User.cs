@@ -48,6 +48,11 @@ public class User : IdentityUser<Guid>, IAuditableEntity
     /// </summary>
     public bool MfaEnabled { get; set; }
 
+    /// <summary>
+    /// Gets or sets the tenant ID for multi-tenant isolation in LocaGuest
+    /// </summary>
+    public string? TenantId { get; set; }
+
     /// <inheritdoc/>
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 
