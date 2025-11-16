@@ -1,0 +1,54 @@
+using AuthGate.Auth.Domain.Entities;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+
+namespace AuthGate.Auth.Infrastructure.Persistence.Configurations;
+
+public class UserInvitationConfiguration : IEntityTypeConfiguration<UserInvitation>
+{
+    public void Configure(EntityTypeBuilder<UserInvitation> builder)
+    {
+        builder.ToTable("UserInvitations");
+        
+        builder.HasKey(ui => ui.Id);
+        
+        builder.Property(ui => ui.TenantId)
+            .IsRequired();
+        
+        builder.Property(ui => ui.TenantCode)
+            .IsRequired()
+            .HasMaxLength(20);
+        
+        builder.Property(ui => ui.TenantName)
+            .IsRequired()
+            .HasMaxLength(200);
+        
+        builder.Property(ui => ui.Email)
+            .IsRequired()
+            .HasMaxLength(256);
+        
+        builder.Property(ui => ui.Role)
+            .IsRequired()
+            .HasMaxLength(50);
+        
+        builder.Property(ui => ui.Token)
+            .IsRequired()
+            .HasMaxLength(100);
+        
+        builder.Property(ui => ui.Status)
+            .IsRequired();
+        
+        builder.Property(ui => ui.Message)
+            .HasMaxLength(1000);
+        
+        // Indexes
+        builder.HasIndex(ui => ui.Token)
+            .IsUnique();
+        
+        builder.HasIndex(ui => new { ui.TenantId, ui.Email });
+        
+        builder.HasIndex(ui => new { ui.Email, ui.Status });
+        
+        builder.HasIndex(ui => ui.ExpiresAt);
+    }
+}

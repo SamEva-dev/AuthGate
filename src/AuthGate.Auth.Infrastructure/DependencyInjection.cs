@@ -1,4 +1,5 @@
 using AuthGate.Auth.Application.Common.Interfaces;
+using AuthGate.Auth.Application.Services;
 using AuthGate.Auth.Domain.Entities;
 using AuthGate.Auth.Domain.Repositories;
 using AuthGate.Auth.Infrastructure.Persistence;
@@ -77,6 +78,23 @@ public static class DependencyInjection
         services.AddScoped<IAuditService, AuditService>();
         services.AddScoped<IUserRoleService, UserRoleService>();
         services.AddScoped<Application.Common.Interfaces.IHttpContextAccessor, HttpContextAccessorService>();
+        
+        // HttpClient for external API calls
+        services.AddHttpClient("LocaGuestApi", client =>
+        {
+            var baseUrl = configuration["HttpClients:LocaGuestApi:BaseUrl"] ?? "https://localhost:5001";
+            client.BaseAddress = new Uri(baseUrl);
+            client.Timeout = TimeSpan.FromSeconds(30);
+        });
+        
+        // HttpContext Accessor
+        services.AddHttpContextAccessor();
+        
+        // Multi-Tenant Services (NEW)
+        services.AddScoped<ITokenService, TokenService>();
+        services.AddScoped<ICurrentUserService, CurrentUserService>();
+        services.AddScoped<ITenantContext, TenantContext>();
+        services.AddScoped<IAuthDbContext>(sp => sp.GetRequiredService<AuthDbContext>());
 
         // Data Seeding
         services.AddScoped<Persistence.DataSeeding.AuthDbSeeder>();

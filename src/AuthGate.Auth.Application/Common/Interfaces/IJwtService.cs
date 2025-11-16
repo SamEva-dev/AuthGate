@@ -17,7 +17,7 @@ public interface IJwtService
     /// <param name="mfaEnabled">Whether MFA is enabled</param>
     /// <param name="tenantId">Tenant ID for multi-tenant isolation (optional)</param>
     /// <returns>JWT access token</returns>
-    string GenerateAccessToken(Guid userId, string email, IEnumerable<string> roles, IEnumerable<string> permissions, bool mfaEnabled, string? tenantId = null);
+    string GenerateAccessToken(Guid userId, string email, IEnumerable<string> roles, IEnumerable<string> permissions, bool mfaEnabled, Guid? tenantId = null);
 
     /// <summary>
     /// Generates a refresh token

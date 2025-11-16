@@ -21,7 +21,7 @@ public class JwtService : IJwtService
         _rsaKeyService = rsaKeyService;
     }
 
-    public string GenerateAccessToken(Guid userId, string email, IEnumerable<string> roles, IEnumerable<string> permissions, bool mfaEnabled, string? tenantId = null)
+    public string GenerateAccessToken(Guid userId, string email, IEnumerable<string> roles, IEnumerable<string> permissions, bool mfaEnabled, Guid? tenantId = null)
     {
         var claims = new List<Claim>
         {
@@ -32,9 +32,9 @@ public class JwtService : IJwtService
         };
 
         // Add tenant_id claim for multi-tenant support
-        if (!string.IsNullOrEmpty(tenantId))
+        if (tenantId.HasValue)
         {
-            claims.Add(new Claim("tenant_id", tenantId));
+            claims.Add(new Claim("tenant_id", tenantId.Value.ToString()));
         }
 
         foreach (var role in roles)

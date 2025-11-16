@@ -2,6 +2,7 @@ using AuthGate.Auth.Application.DTOs.Auth;
 using AuthGate.Auth.Application.Features.Auth.Commands.Login;
 using AuthGate.Auth.Application.Features.Auth.Commands.RefreshToken;
 using AuthGate.Auth.Application.Features.Auth.Commands.Register;
+using AuthGate.Auth.Application.Features.Auth.Commands.RegisterWithTenant;
 using AuthGate.Auth.Domain.Entities;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -43,6 +44,26 @@ public class AuthController : ControllerBase
     [ProducesResponseType(typeof(RegisterResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Register([FromBody] RegisterCommand command)
+    {
+        var result = await _mediator.Send(command);
+
+        if (result.IsFailure)
+        {
+            return BadRequest(new { error = result.Error });
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Register a new organization owner (TenantOwner) with automatic organization creation
+    /// This creates both an organization in LocaGuest and a user in AuthGate
+    /// </summary>
+    [HttpPost("register-with-tenant")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(RegisterWithTenantResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> RegisterWithTenant([FromBody] RegisterWithTenantCommand command)
     {
         var result = await _mediator.Send(command);
 

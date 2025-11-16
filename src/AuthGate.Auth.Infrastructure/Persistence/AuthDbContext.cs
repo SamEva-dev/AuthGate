@@ -1,3 +1,4 @@
+using AuthGate.Auth.Application.Common.Interfaces;
 using AuthGate.Auth.Domain.Common;
 using AuthGate.Auth.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
@@ -17,7 +18,7 @@ public class AuthDbContext : IdentityDbContext<
     IdentityUserRole<Guid>,
     IdentityUserLogin<Guid>,
     IdentityRoleClaim<Guid>,
-    IdentityUserToken<Guid>>
+    IdentityUserToken<Guid>>, IAuthDbContext
 {
     public AuthDbContext(DbContextOptions<AuthDbContext> options) : base(options)
     {
@@ -29,6 +30,7 @@ public class AuthDbContext : IdentityDbContext<
     public DbSet<MfaSecret> MfaSecrets => Set<MfaSecret>();
     public DbSet<RecoveryCode> RecoveryCodes => Set<RecoveryCode>();
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
+    public DbSet<UserInvitation> UserInvitations => Set<UserInvitation>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
