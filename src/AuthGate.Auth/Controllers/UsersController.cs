@@ -65,7 +65,7 @@ public class UsersController : ControllerBase
     /// Get user details by ID
     /// </summary>
     [HttpGet("{id}")]
-    [HasPermission("users.read")]
+    //[HasPermission("users.read")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
