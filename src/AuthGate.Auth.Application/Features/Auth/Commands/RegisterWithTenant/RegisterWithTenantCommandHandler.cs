@@ -40,6 +40,8 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
         RegisterWithTenantCommand request,
         CancellationToken cancellationToken)
     {
+        Guid? createdOrganizationId = null;
+        
         try
         {
             // 1. Validate user doesn't already exist
@@ -68,17 +70,28 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
                 var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
                 _logger.LogError("Failed to create organization: {StatusCode} - {Error}", 
                     response.StatusCode, errorContent);
+                // COMPENSATING TRANSACTION: Rollback organization if it was created
+                if (createdOrganizationId.HasValue)
+                {
+                    await RollbackOrganizationAsync(createdOrganizationId.Value, cancellationToken);
+                }
                 return Result.Failure<RegisterWithTenantResponse>("Failed to create organization. Please try again.");
             }
 
             var apiResponse = await response.Content.ReadFromJsonAsync<ApiResponse<OrganizationDto>>(cancellationToken);
             
-            if (apiResponse?.Value == null)
+            if (apiResponse?.Data == null)
             {
+                // COMPENSATING TRANSACTION: Rollback organization if it was created
+                if (createdOrganizationId.HasValue)
+                {
+                    await RollbackOrganizationAsync(createdOrganizationId.Value, cancellationToken);
+                }
                 return Result.Failure<RegisterWithTenantResponse>("Invalid response from organization service");
             }
 
-            var organization = apiResponse.Value;
+            var organization = apiResponse.Data;
+            createdOrganizationId = organization.OrganizationId; // Track for rollback
             
             _logger.LogInformation("Organization created: {Code} - {Name}", organization.Code, organization.Name);
 
@@ -104,8 +117,8 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
                 var errors = string.Join(", ", createResult.Errors.Select(e => e.Description));
                 _logger.LogError("Failed to create user: {Errors}", errors);
                 
-                // TODO: Compensating transaction - delete organization if user creation fails
-                // await DeleteOrganizationAsync(organization.OrganizationId);
+                // COMPENSATING TRANSACTION: Delete organization since user creation failed
+                await RollbackOrganizationAsync(createdOrganizationId.Value, cancellationToken);
                 
                 return Result.Failure<RegisterWithTenantResponse>($"Failed to create user: {errors}");
             }
@@ -115,8 +128,14 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
             
             if (!roleResult.Succeeded)
             {
-                _logger.LogError("Failed to assign TenantOwner role to user {UserId}", user.Id);
-                // Continue anyway, role can be assigned later
+                var roleErrors = string.Join(", ", roleResult.Errors.Select(e => e.Description));
+                _logger.LogError("Failed to assign TenantOwner role to user {UserId}: {Errors}", user.Id, roleErrors);
+                
+                // ROLLBACK: Delete user and organization
+                await _userManager.DeleteAsync(user);
+                await RollbackOrganizationAsync(createdOrganizationId.Value, cancellationToken);
+                
+                return Result.Failure<RegisterWithTenantResponse>($"Failed to assign role: {roleErrors}");
             }
 
             // 5. Generate JWT with tenant claims
@@ -143,16 +162,57 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error during registration workflow for {Email}", request.Email);
+            
+            // COMPENSATING TRANSACTION: Rollback organization if it was created
+            if (createdOrganizationId.HasValue)
+            {
+                await RollbackOrganizationAsync(createdOrganizationId.Value, cancellationToken);
+            }
+            
             return Result.Failure<RegisterWithTenantResponse>($"Registration failed: {ex.Message}");
+        }
+    }
+    
+    /// <summary>
+    /// Compensating transaction: Delete organization in LocaGuest if user creation fails
+    /// Implements the Saga pattern for distributed transaction rollback
+    /// </summary>
+    private async Task RollbackOrganizationAsync(Guid organizationId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            _logger.LogWarning("ROLLBACK: Attempting to delete organization {OrganizationId} due to user creation failure", organizationId);
+            
+            var httpClient = _httpClientFactory.CreateClient("LocaGuestApi");
+            var deleteResponse = await httpClient.DeleteAsync($"/api/organizations/{organizationId}", cancellationToken);
+            
+            if (deleteResponse.IsSuccessStatusCode)
+            {
+                _logger.LogInformation("ROLLBACK: Successfully deleted organization {OrganizationId}", organizationId);
+            }
+            else
+            {
+                var errorContent = await deleteResponse.Content.ReadAsStringAsync(cancellationToken);
+                _logger.LogError(
+                    "ROLLBACK FAILED: Could not delete organization {OrganizationId}. Status: {StatusCode}, Error: {Error}. MANUAL CLEANUP REQUIRED!",
+                    organizationId, deleteResponse.StatusCode, errorContent);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, 
+                "ROLLBACK EXCEPTION: Failed to delete organization {OrganizationId}. MANUAL CLEANUP REQUIRED!", 
+                organizationId);
         }
     }
 
     // DTOs for LocaGuest API communication
+    // ✅ Correspond à Result<T> de LocaGuest
     private record ApiResponse<T>
     {
         public bool IsSuccess { get; init; }
-        public T? Value { get; init; }
-        public string? Error { get; init; }
+        public T? Data { get; init; }  // ✅ Changed from Value to Data
+        public string? ErrorMessage { get; init; }  // ✅ Changed from Error to ErrorMessage
     }
 
     private record OrganizationDto

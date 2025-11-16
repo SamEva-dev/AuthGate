@@ -40,4 +40,8 @@
     <ProjectReference Include="..\AuthGate.Auth.Infrastructure\AuthGate.Auth.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Data\" />
+  </ItemGroup>
+
 </Project>

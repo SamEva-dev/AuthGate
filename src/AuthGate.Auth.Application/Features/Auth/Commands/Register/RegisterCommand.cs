@@ -15,14 +15,9 @@ public record RegisterCommand : IRequest<Result<RegisterResponseDto>>
     public required string Email { get; init; }
 
     /// <summary>
-    /// User's password
+    /// User's password (validated in UI)
     /// </summary>
     public required string Password { get; init; }
-
-    /// <summary>
-    /// Password confirmation
-    /// </summary>
-    public required string ConfirmPassword { get; init; }
 
     /// <summary>
     /// User's first name

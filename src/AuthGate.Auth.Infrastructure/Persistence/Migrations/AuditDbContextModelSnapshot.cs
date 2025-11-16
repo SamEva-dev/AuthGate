@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
 
-namespace AuthGate.Auth.Infrastructure.Persistence.AuditMigrations
+namespace AuthGate.Auth.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AuditDbContext))]
     partial class AuditDbContextModelSnapshot : ModelSnapshot

@@ -8,6 +8,8 @@ using AuthGate.Auth.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.AspNetCore.Identity;
+using Polly;
+using Polly.Extensions.Http;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AuthGate.Auth.Infrastructure;
@@ -79,13 +81,18 @@ public static class DependencyInjection
         services.AddScoped<IUserRoleService, UserRoleService>();
         services.AddScoped<Application.Common.Interfaces.IHttpContextAccessor, HttpContextAccessorService>();
         
-        // HttpClient for external API calls
+        // HttpClient for external API calls with Polly resilience policies
         services.AddHttpClient("LocaGuestApi", client =>
         {
             var baseUrl = configuration["HttpClients:LocaGuestApi:BaseUrl"] ?? "https://localhost:5001";
             client.BaseAddress = new Uri(baseUrl);
             client.Timeout = TimeSpan.FromSeconds(30);
-        });
+        })
+        .AddTransientHttpErrorPolicy(policyBuilder => 
+            policyBuilder.WaitAndRetryAsync(
+                retryCount: 3,
+                sleepDurationProvider: retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)))) // Exponential backoff: 2s, 4s, 8s
+        .AddPolicyHandler(Polly.Policy.TimeoutAsync<HttpResponseMessage>(TimeSpan.FromSeconds(10))); // Circuit timeout per request
         
         // HttpContext Accessor
         services.AddHttpContextAccessor();

@@ -22,9 +22,8 @@ public class RegisterCommandValidator : AbstractValidator<RegisterCommand>
             .Matches(@"[0-9]").WithMessage("Password must contain at least one digit")
             .Matches(@"[\W_]").WithMessage("Password must contain at least one special character");
 
-        RuleFor(x => x.ConfirmPassword)
-            .NotEmpty().WithMessage("Password confirmation is required")
-            .Equal(x => x.Password).WithMessage("Passwords do not match");
+        // Note: Password confirmation should be validated in the UI, not in the backend
+        // The frontend should ensure Password and ConfirmPassword match before sending the request
 
         RuleFor(x => x.FirstName)
             .MaximumLength(100).WithMessage("First name must not exceed 100 characters")
