@@ -1,3 +1,4 @@
+using AuthGate.Auth.Domain.Constants;
 using AuthGate.Auth.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging;
@@ -36,6 +37,9 @@ public class AuthDbSeeder
             // Seed Permissions
             await SeedPermissionsAsync();
 
+            // Seed Role Permissions
+            await SeedRolePermissionsAsync();
+
             // Seed Admin User
             await SeedAdminUserAsync();
 
@@ -55,9 +59,12 @@ public class AuthDbSeeder
     {
         var roles = new[]
         {
-            new { Name = "Admin", Description = "Administrator with full access", IsSystemRole = true },
-            new { Name = "User", Description = "Standard user", IsSystemRole = false },
-            new { Name = "Manager", Description = "Manager with elevated permissions", IsSystemRole = false }
+            new { Name = Roles.SuperAdmin, Description = "Rôle technique réservé à l'équipe plateforme - Accès global à tous les tenants", IsSystemRole = true },
+            new { Name = Roles.TenantOwner, Description = "Propriétaire du compte/organisation - Gère la facturation et l'organisation", IsSystemRole = false },
+            new { Name = Roles.TenantAdmin, Description = "Administrateur désigné par l'Owner - Peut gérer les entités métier et utilisateurs", IsSystemRole = false },
+            new { Name = Roles.TenantManager, Description = "Gestionnaire immobilier - Accès opérationnel avancé", IsSystemRole = false },
+            new { Name = Roles.TenantUser, Description = "Utilisateur standard du tenant - Assistant, agent, consultant", IsSystemRole = false },
+            new { Name = Roles.ReadOnly, Description = "Accès lecture seule - Comptable externe, auditeur", IsSystemRole = false }
         };
 
         foreach (var roleData in roles)
@@ -92,14 +99,55 @@ public class AuthDbSeeder
     {
         var permissions = new[]
         {
-            new { Code = "users.read", DisplayName = "Read Users", Description = "Can view user information" },
-            new { Code = "users.write", DisplayName = "Write Users", Description = "Can create and update users" },
-            new { Code = "users.delete", DisplayName = "Delete Users", Description = "Can delete users" },
-            new { Code = "roles.read", DisplayName = "Read Roles", Description = "Can view roles" },
-            new { Code = "roles.write", DisplayName = "Write Roles", Description = "Can create and update roles" },
-            new { Code = "roles.delete", DisplayName = "Delete Roles", Description = "Can delete roles" },
-            new { Code = "permissions.read", DisplayName = "Read Permissions", Description = "Can view permissions" },
-            new { Code = "permissions.write", DisplayName = "Write Permissions", Description = "Can assign permissions" }
+            // Tenant Management
+            new { Code = Permissions.TenantSettingsRead, DisplayName = "Read Tenant Settings", Description = "Can view tenant settings and configuration" },
+            new { Code = Permissions.TenantSettingsWrite, DisplayName = "Write Tenant Settings", Description = "Can modify tenant settings and configuration" },
+            new { Code = Permissions.TenantDelete, DisplayName = "Delete Tenant", Description = "Can delete tenant (dangerous operation)" },
+            
+            // Billing & Subscription
+            new { Code = Permissions.BillingRead, DisplayName = "Read Billing", Description = "Can view billing information and invoices" },
+            new { Code = Permissions.BillingWrite, DisplayName = "Write Billing", Description = "Can manage subscriptions and payment methods" },
+            
+            // User Management
+            new { Code = Permissions.UsersRead, DisplayName = "Read Users", Description = "Can view users in the tenant" },
+            new { Code = Permissions.UsersWrite, DisplayName = "Write Users", Description = "Can create and update users" },
+            new { Code = Permissions.UsersDelete, DisplayName = "Delete Users", Description = "Can delete users" },
+            new { Code = Permissions.UsersInvite, DisplayName = "Invite Users", Description = "Can invite new users to the tenant" },
+            
+            // Role Management
+            new { Code = Permissions.RolesRead, DisplayName = "Read Roles", Description = "Can view roles and their permissions" },
+            new { Code = Permissions.RolesAssign, DisplayName = "Assign Roles", Description = "Can assign roles to users" },
+            new { Code = Permissions.RolesWrite, DisplayName = "Write Roles", Description = "Can create and modify custom roles" },
+            
+            // Properties Management
+            new { Code = Permissions.PropertiesRead, DisplayName = "Read Properties", Description = "Can view properties" },
+            new { Code = Permissions.PropertiesWrite, DisplayName = "Write Properties", Description = "Can create and update properties" },
+            new { Code = Permissions.PropertiesDelete, DisplayName = "Delete Properties", Description = "Can delete properties" },
+            
+            // Tenants (Locataires) Management
+            new { Code = Permissions.TenantsRead, DisplayName = "Read Tenants", Description = "Can view tenants (locataires)" },
+            new { Code = Permissions.TenantsWrite, DisplayName = "Write Tenants", Description = "Can create and update tenants" },
+            new { Code = Permissions.TenantsDelete, DisplayName = "Delete Tenants", Description = "Can delete tenants" },
+            
+            // Contracts Management
+            new { Code = Permissions.ContractsRead, DisplayName = "Read Contracts", Description = "Can view contracts" },
+            new { Code = Permissions.ContractsWrite, DisplayName = "Write Contracts", Description = "Can create and update contracts" },
+            new { Code = Permissions.ContractsTerminate, DisplayName = "Terminate Contracts", Description = "Can terminate contracts" },
+            new { Code = Permissions.ContractsDelete, DisplayName = "Delete Contracts", Description = "Can delete contracts" },
+            
+            // Documents Management
+            new { Code = Permissions.DocumentsRead, DisplayName = "Read Documents", Description = "Can view documents" },
+            new { Code = Permissions.DocumentsUpload, DisplayName = "Upload Documents", Description = "Can upload new documents" },
+            new { Code = Permissions.DocumentsGenerate, DisplayName = "Generate Documents", Description = "Can generate documents from templates" },
+            new { Code = Permissions.DocumentsDelete, DisplayName = "Delete Documents", Description = "Can delete documents" },
+            
+            // Analytics & Reporting
+            new { Code = Permissions.AnalyticsRead, DisplayName = "Read Analytics", Description = "Can view analytics and reports" },
+            new { Code = Permissions.AnalyticsExport, DisplayName = "Export Analytics", Description = "Can export data and reports" },
+            
+            // Logs & Audit
+            new { Code = Permissions.AuditLogsRead, DisplayName = "Read Audit Logs", Description = "Can view audit logs" },
+            new { Code = Permissions.SystemLogsRead, DisplayName = "Read System Logs", Description = "Can view system logs (SuperAdmin only)" }
         };
 
         foreach (var permData in permissions)
@@ -118,6 +166,43 @@ public class AuthDbSeeder
 
                 _context.Permissions.Add(permission);
                 _logger.LogInformation("Created permission: {PermissionCode}", permData.Code);
+            }
+        }
+
+        await _context.SaveChangesAsync();
+    }
+
+    private async Task SeedRolePermissionsAsync()
+    {
+        foreach (var roleName in Roles.All)
+        {
+            var role = await _roleManager.FindByNameAsync(roleName);
+            if (role == null)
+            {
+                _logger.LogWarning("Role {RoleName} not found for permission assignment", roleName);
+                continue;
+            }
+
+            var permissionsForRole = RolePermissionsMatrix.GetPermissionsForRole(roleName);
+            
+            foreach (var permissionCode in permissionsForRole)
+            {
+                var permission = _context.Permissions.FirstOrDefault(p => p.Code == permissionCode);
+                if (permission == null)
+                {
+                    _logger.LogWarning("Permission {PermissionCode} not found", permissionCode);
+                    continue;
+                }
+
+                if (!_context.RolePermissions.Any(rp => rp.RoleId == role.Id && rp.PermissionId == permission.Id))
+                {
+                    _context.RolePermissions.Add(new RolePermission
+                    {
+                        RoleId = role.Id,
+                        PermissionId = permission.Id
+                    });
+                    _logger.LogInformation("Assigned permission {PermissionCode} to role {RoleName}", permissionCode, roleName);
+                }
             }
         }
 
@@ -148,28 +233,8 @@ public class AuthDbSeeder
             var result = await _userManager.CreateAsync(adminUser, adminPassword);
             if (result.Succeeded)
             {
-                // Assign Admin role
-                await _userManager.AddToRoleAsync(adminUser, "Admin");
-
-                // Assign all permissions to Admin role
-                var adminRole = await _roleManager.FindByNameAsync("Admin");
-                if (adminRole != null)
-                {
-                    var allPermissions = _context.Permissions.ToList();
-                    foreach (var permission in allPermissions)
-                    {
-                        if (!_context.RolePermissions.Any(rp => rp.RoleId == adminRole.Id && rp.PermissionId == permission.Id))
-                        {
-                            _context.RolePermissions.Add(new RolePermission
-                            {
-                                RoleId = adminRole.Id,
-                                PermissionId = permission.Id
-                            });
-                        }
-                    }
-                    await _context.SaveChangesAsync();
-                }
-
+                // Assign SuperAdmin role (permissions are already assigned via SeedRolePermissionsAsync)
+                await _userManager.AddToRoleAsync(adminUser, Roles.SuperAdmin);
                 _logger.LogInformation("Created admin user: {Email}", adminEmail);
             }
             else
@@ -208,8 +273,8 @@ public class AuthDbSeeder
             var result = await _userManager.CreateAsync(demoUser, demoPassword);
             if (result.Succeeded)
             {
-                // Assign User role
-                await _userManager.AddToRoleAsync(demoUser, "User");
+                // Assign TenantOwner role to demo user
+                await _userManager.AddToRoleAsync(demoUser, Roles.TenantOwner);
                 _logger.LogInformation("Created demo user: {Email}", demoEmail);
             }
             else
