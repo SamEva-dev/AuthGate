@@ -1,4 +1,6 @@
 using AuthGate.Auth.Application.DTOs.Auth;
+using AuthGate.Auth.Application.Features.Auth.Commands.AcceptInvitation;
+using AuthGate.Auth.Application.Features.Auth.Commands.InviteCollaborator;
 using AuthGate.Auth.Application.Features.Auth.Commands.Login;
 using AuthGate.Auth.Application.Features.Auth.Commands.RefreshToken;
 using AuthGate.Auth.Application.Features.Auth.Commands.Register;
@@ -187,5 +189,49 @@ public class AuthController : ControllerBase
         };
 
         return Ok(currentUserDto);
+    }
+
+    /// <summary>
+    /// Invite a collaborator to join the organization
+    /// Requires TenantOwner or TenantAdmin role
+    /// </summary>
+    [HttpPost("invite")]
+    [Authorize]
+    [ProducesResponseType(typeof(InviteCollaboratorResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> InviteCollaborator([FromBody] InviteCollaboratorCommand command)
+    {
+        var result = await _mediator.Send(command);
+
+        if (result.IsFailure)
+        {
+            return BadRequest(new { error = result.Error });
+        }
+
+        _logger.LogInformation("Invitation sent to {Email}", command.Email);
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Accept an invitation and create a user account
+    /// Public endpoint - no authentication required
+    /// </summary>
+    [HttpPost("accept-invitation")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(AcceptInvitationResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> AcceptInvitation([FromBody] AcceptInvitationCommand command)
+    {
+        var result = await _mediator.Send(command);
+
+        if (result.IsFailure)
+        {
+            return BadRequest(new { error = result.Error });
+        }
+
+        _logger.LogInformation("Invitation accepted by {Email}", result.Value.Email);
+        return Ok(result.Value);
     }
 }

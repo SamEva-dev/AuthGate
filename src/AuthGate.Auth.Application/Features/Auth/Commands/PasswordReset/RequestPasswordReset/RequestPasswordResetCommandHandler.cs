@@ -1,5 +1,6 @@
 using AuthGate.Auth.Application.Common;
 using AuthGate.Auth.Application.Common.Interfaces;
+using AuthGate.Auth.Application.Services.Email;
 using AuthGate.Auth.Domain.Entities;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
@@ -89,6 +90,7 @@ public class RequestPasswordResetCommandHandler : IRequestHandler<RequestPasswor
             request.Email,
             "Password Reset Request",
             emailBody,
+            null,  // textBody
             cancellationToken);
 
         _logger.LogInformation("Password reset email sent to: {Email}", request.Email);

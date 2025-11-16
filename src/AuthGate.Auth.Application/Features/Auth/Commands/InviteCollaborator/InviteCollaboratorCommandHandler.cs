@@ -1,6 +1,7 @@
 using AuthGate.Auth.Application.Common;
 using AuthGate.Auth.Application.Common.Interfaces;
 using AuthGate.Auth.Application.Services;
+using AuthGate.Auth.Application.Services.Email;
 using AuthGate.Auth.Domain.Constants;
 using AuthGate.Auth.Domain.Entities;
 using MediatR;
@@ -17,6 +18,7 @@ public class InviteCollaboratorCommandHandler : IRequestHandler<InviteCollaborat
     private readonly UserManager<User> _userManager;
     private readonly ICurrentUserService _currentUserService;
     private readonly ITenantContext _tenantContext;
+    private readonly IEmailService _emailService;
     private readonly IConfiguration _configuration;
     private readonly ILogger<InviteCollaboratorCommandHandler> _logger;
 
@@ -25,6 +27,7 @@ public class InviteCollaboratorCommandHandler : IRequestHandler<InviteCollaborat
         UserManager<User> userManager,
         ICurrentUserService currentUserService,
         ITenantContext tenantContext,
+        IEmailService emailService,
         IConfiguration configuration,
         ILogger<InviteCollaboratorCommandHandler> logger)
     {
@@ -32,6 +35,7 @@ public class InviteCollaboratorCommandHandler : IRequestHandler<InviteCollaborat
         _userManager = userManager;
         _currentUserService = currentUserService;
         _tenantContext = tenantContext;
+        _emailService = emailService;
         _configuration = configuration;
         _logger = logger;
     }
@@ -122,10 +126,31 @@ public class InviteCollaboratorCommandHandler : IRequestHandler<InviteCollaborat
 
             // 7. Generate invitation URL
             var frontendUrl = _configuration["Frontend:BaseUrl"] ?? "http://localhost:4200";
-            var invitationUrl = $"{frontendUrl}/invite/{token}";
+            var invitationUrl = $"{frontendUrl}/accept-invitation/{token}";
 
-            // TODO: Send invitation email
-            // await _emailService.SendInvitationEmailAsync(invitation, invitationUrl);
+            // 8. ✅ Send invitation email
+            try
+            {
+                await _emailService.SendInvitationEmailAsync(
+                    toEmail: request.Email,
+                    toName: request.Email.Split('@')[0], // Use email prefix as default name
+                    inviterName: $"{inviter.FirstName} {inviter.LastName}",
+                    tenantName: tenantName,
+                    role: request.Role,
+                    invitationUrl: invitationUrl,
+                    expiresAt: expiresAt,
+                    cancellationToken: cancellationToken);
+
+                _logger.LogInformation(
+                    "Invitation email sent to {Email}", request.Email);
+            }
+            catch (Exception emailEx)
+            {
+                _logger.LogWarning(emailEx, 
+                    "Failed to send invitation email to {Email}, but invitation was created", 
+                    request.Email);
+                // Continue even if email fails - invitation is already created
+            }
 
             _logger.LogInformation(
                 "Invitation created: {Email} invited to {TenantCode} as {Role} by {InviterId}",

@@ -1,10 +1,12 @@
 using AuthGate.Auth.Application.Common.Interfaces;
 using AuthGate.Auth.Application.Services;
+using AuthGate.Auth.Application.Services.Email;
 using AuthGate.Auth.Domain.Entities;
 using AuthGate.Auth.Domain.Repositories;
 using AuthGate.Auth.Infrastructure.Persistence;
 using AuthGate.Auth.Infrastructure.Persistence.Repositories;
 using AuthGate.Auth.Infrastructure.Services;
+using AuthGate.Auth.Infrastructure.Services.Email;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.AspNetCore.Identity;
@@ -76,7 +78,8 @@ public static class DependencyInjection
         services.AddScoped<IJwtService, JwtService>();
         services.AddScoped<Application.Common.Interfaces.IPasswordHasher, Services.PasswordHasher>();
         services.AddScoped<ITotpService, TotpService>();
-        services.AddScoped<IEmailService, EmailService>();
+        services.AddScoped<IEmailService, SmtpEmailService>();
+        services.Configure<EmailSettings>(configuration.GetSection(EmailSettings.SectionName));
         services.AddScoped<IAuditService, AuditService>();
         services.AddScoped<IUserRoleService, UserRoleService>();
         services.AddScoped<Application.Common.Interfaces.IHttpContextAccessor, HttpContextAccessorService>();
