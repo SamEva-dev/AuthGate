@@ -404,3 +404,7 @@ FodyWeavers.xsd
 # JetBrains Rider
 *.sln.iml
 
+/src/AuthGate.Auth/Data/AuthGate.db
+/src/AuthGate.Auth/Data/AuthGate.db-wal
+/src/AuthGate.Auth/Data/AuthGate.db-shm
+/src/AuthGate.Auth/Data/AuthGateAudit.db
