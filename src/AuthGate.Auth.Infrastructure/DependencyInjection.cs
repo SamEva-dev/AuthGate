@@ -78,6 +78,7 @@ public static class DependencyInjection
         services.AddScoped<IJwtService, JwtService>();
         services.AddScoped<Application.Common.Interfaces.IPasswordHasher, Services.PasswordHasher>();
         services.AddScoped<ITotpService, TotpService>();
+        services.AddScoped<ITwoFactorService, TwoFactorService>();
         services.AddScoped<IEmailService, SmtpEmailService>();
         services.Configure<EmailSettings>(configuration.GetSection(EmailSettings.SectionName));
         services.AddScoped<IAuditService, AuditService>();

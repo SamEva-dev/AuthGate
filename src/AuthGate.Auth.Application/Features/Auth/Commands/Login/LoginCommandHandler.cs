@@ -17,6 +17,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<LoginRes
     private readonly SignInManager<User> _signInManager;
     private readonly UserManager<User> _userManager;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IMfaSecretRepository _mfaSecretRepository;
     private readonly IJwtService _jwtService;
     private readonly IUserRoleService _userRoleService;
     private readonly ILogger<LoginCommandHandler> _logger;
@@ -25,6 +26,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<LoginRes
         SignInManager<User> signInManager,
         UserManager<User> userManager,
         IUnitOfWork unitOfWork,
+        IMfaSecretRepository mfaSecretRepository,
         IJwtService jwtService,
         IUserRoleService userRoleService,
         ILogger<LoginCommandHandler> logger)
@@ -32,6 +34,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<LoginRes
         _signInManager = signInManager;
         _userManager = userManager;
         _unitOfWork = unitOfWork;
+        _mfaSecretRepository = mfaSecretRepository;
         _jwtService = jwtService;
         _userRoleService = userRoleService;
         _logger = logger;
@@ -77,18 +80,32 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<LoginRes
                 return Result.Failure<LoginResponseDto>("Invalid email or password");
             }
 
-            // If MFA is enabled, return temporary token for MFA verification
-            if (user.MfaEnabled)
+            // Check if 2FA/MFA is enabled for this user
+            var mfaSecret = await _mfaSecretRepository.GetByUserIdAsync(user.Id, cancellationToken);
+            if (mfaSecret?.IsEnabled == true)
             {
-                var mfaToken = _jwtService.GenerateRefreshToken(); // Use as temporary token
-                var response = new LoginResponseDto
+                // Generate temporary token for MFA verification (short-lived, 5 minutes)
+                var mfaToken = Guid.NewGuid().ToString("N"); // Simple GUID for now
+                
+                // Store MFA token temporarily (TODO: Use cache/Redis in production)
+                var mfaTokenEntity = new Domain.Entities.RefreshToken
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = user.Id,
+                    Token = mfaToken,
+                    JwtId = $"mfa_{Guid.NewGuid():N}",
+                    ExpiresAtUtc = DateTime.UtcNow.AddMinutes(5), // Short expiration for MFA
+                    CreatedAtUtc = DateTime.UtcNow
+                };
+                await _unitOfWork.RefreshTokens.AddAsync(mfaTokenEntity, cancellationToken);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+                _logger.LogInformation("User {UserId} requires 2FA verification", user.Id);
+                return Result.Success(new LoginResponseDto
                 {
                     RequiresMfa = true,
                     MfaToken = mfaToken
-                };
-
-                _logger.LogInformation("User {UserId} requires MFA verification", user.Id);
-                return Result.Success(response);
+                });
             }
 
             // Get user roles and permissions using Identity
@@ -97,9 +114,9 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<LoginRes
             var permissions = await _userRoleService.GetUserPermissionsAsync(user);
             _logger.LogDebug("Found {RoleCount} roles and {PermissionCount} permissions", roles.Count(), permissions.Count());
 
-            // Generate tokens
+            // Generate tokens (MFA is false here since we passed the check above)
             _logger.LogDebug("Generating access token");
-            var accessToken = _jwtService.GenerateAccessToken(user.Id, user.Email!, roles, permissions, user.MfaEnabled, user.TenantId);
+            var accessToken = _jwtService.GenerateAccessToken(user.Id, user.Email!, roles, permissions, false, user.TenantId);
             _logger.LogDebug("Generating refresh token");
             var refreshToken = _jwtService.GenerateRefreshToken();
             _logger.LogDebug("Extracting JWT ID");
