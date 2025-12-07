@@ -6,6 +6,7 @@ using AuthGate.Auth.Application.Features.Auth.Commands.RefreshToken;
 using AuthGate.Auth.Application.Features.Auth.Commands.Register;
 using AuthGate.Auth.Application.Features.Auth.Commands.RegisterWithTenant;
 using AuthGate.Auth.Application.Features.Auth.Commands.Verify2FA;
+using AuthGate.Auth.Application.Features.Auth.Commands.VerifyRecoveryCode;
 using AuthGate.Auth.Domain.Entities;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -109,6 +110,26 @@ public class AuthController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Verify2FA([FromBody] Verify2FACommand command)
+    {
+        var result = await _mediator.Send(command);
+
+        if (result.IsFailure)
+        {
+            return Unauthorized(new { error = result.Error });
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Verify 2FA recovery code and complete login
+    /// </summary>
+    [HttpPost("verify-recovery-code")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(LoginResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> VerifyRecoveryCode([FromBody] VerifyRecoveryCodeCommand command)
     {
         var result = await _mediator.Send(command);
 
