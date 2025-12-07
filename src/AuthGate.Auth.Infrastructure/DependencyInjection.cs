@@ -5,6 +5,7 @@ using AuthGate.Auth.Domain.Entities;
 using AuthGate.Auth.Domain.Repositories;
 using AuthGate.Auth.Infrastructure.Persistence;
 using AuthGate.Auth.Infrastructure.Persistence.Repositories;
+using AuthGate.Auth.Infrastructure.Repositories;
 using AuthGate.Auth.Infrastructure.Services;
 using AuthGate.Auth.Infrastructure.Services.Email;
 using Microsoft.EntityFrameworkCore;
@@ -66,6 +67,7 @@ public static class DependencyInjection
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IMfaSecretRepository, MfaSecretRepository>();
         services.AddScoped<IRecoveryCodeRepository, RecoveryCodeRepository>();
+        services.AddScoped<ITrustedDeviceRepository, TrustedDeviceRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         // Audit repository (separate DB)
@@ -79,6 +81,7 @@ public static class DependencyInjection
         services.AddScoped<Application.Common.Interfaces.IPasswordHasher, Services.PasswordHasher>();
         services.AddScoped<ITotpService, TotpService>();
         services.AddScoped<ITwoFactorService, TwoFactorService>();
+        services.AddScoped<IDeviceFingerprintService, DeviceFingerprintService>();
         services.AddScoped<IEmailService, SmtpEmailService>();
         services.Configure<EmailSettings>(configuration.GetSection(EmailSettings.SectionName));
         services.AddScoped<IAuditService, AuditService>();

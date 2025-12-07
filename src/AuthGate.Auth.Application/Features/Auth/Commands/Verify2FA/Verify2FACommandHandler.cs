@@ -18,7 +18,9 @@ public class Verify2FACommandHandler : IRequestHandler<Verify2FACommand, Result<
     private readonly UserManager<User> _userManager;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IMfaSecretRepository _mfaSecretRepository;
+    private readonly ITrustedDeviceRepository _trustedDeviceRepository;
     private readonly ITwoFactorService _twoFactorService;
+    private readonly IDeviceFingerprintService _deviceFingerprintService;
     private readonly IJwtService _jwtService;
     private readonly IUserRoleService _userRoleService;
     private readonly ILogger<Verify2FACommandHandler> _logger;
@@ -27,7 +29,9 @@ public class Verify2FACommandHandler : IRequestHandler<Verify2FACommand, Result<
         UserManager<User> userManager,
         IUnitOfWork unitOfWork,
         IMfaSecretRepository mfaSecretRepository,
+        ITrustedDeviceRepository trustedDeviceRepository,
         ITwoFactorService twoFactorService,
+        IDeviceFingerprintService deviceFingerprintService,
         IJwtService jwtService,
         IUserRoleService userRoleService,
         ILogger<Verify2FACommandHandler> logger)
@@ -35,7 +39,9 @@ public class Verify2FACommandHandler : IRequestHandler<Verify2FACommand, Result<
         _userManager = userManager;
         _unitOfWork = unitOfWork;
         _mfaSecretRepository = mfaSecretRepository;
+        _trustedDeviceRepository = trustedDeviceRepository;
         _twoFactorService = twoFactorService;
+        _deviceFingerprintService = deviceFingerprintService;
         _jwtService = jwtService;
         _userRoleService = userRoleService;
         _logger = logger;
@@ -114,7 +120,26 @@ public class Verify2FACommandHandler : IRequestHandler<Verify2FACommand, Result<
             };
             await _unitOfWork.RefreshTokens.AddAsync(refreshTokenEntity, cancellationToken);
 
-            // 10. Update last login
+            // 10. Store trusted device if "Remember device" was checked
+            if (request.RememberDevice && !string.IsNullOrEmpty(request.DeviceFingerprint))
+            {
+                var trustedDevice = new Domain.Entities.TrustedDevice
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = user.Id,
+                    DeviceFingerprint = request.DeviceFingerprint,
+                    DeviceName = _deviceFingerprintService.GetDeviceName(request.UserAgent),
+                    IpAddress = request.IpAddress,
+                    UserAgent = request.UserAgent,
+                    ExpiresAtUtc = DateTime.UtcNow.AddDays(30),
+                    CreatedAtUtc = DateTime.UtcNow
+                };
+                
+                await _trustedDeviceRepository.AddAsync(trustedDevice, cancellationToken);
+                _logger.LogInformation("Device {DeviceName} marked as trusted for user {UserId} (30 days)", trustedDevice.DeviceName, user.Id);
+            }
+
+            // 11. Update last login
             user.LastLoginAtUtc = DateTime.UtcNow;
             await _userManager.UpdateAsync(user);
 

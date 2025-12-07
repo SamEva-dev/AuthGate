@@ -19,6 +19,26 @@ public class VerifyRecoveryCodeCommand : IRequest<Result<LoginResponseDto>>
     /// Gets or sets the recovery code (8-12 characters alphanumeric)
     /// </summary>
     public required string RecoveryCode { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to remember this device for 30 days
+    /// </summary>
+    public bool RememberDevice { get; set; }
+
+    /// <summary>
+    /// Gets or sets the device fingerprint for trusted device storage
+    /// </summary>
+    public string? DeviceFingerprint { get; set; }
+
+    /// <summary>
+    /// Gets or sets the User-Agent for device name extraction
+    /// </summary>
+    public string? UserAgent { get; set; }
+
+    /// <summary>
+    /// Gets or sets the IP address of the device
+    /// </summary>
+    public string? IpAddress { get; set; }
 }
 
 /// <summary>

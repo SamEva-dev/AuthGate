@@ -21,6 +21,11 @@ public record LoginCommand : IRequest<Result<LoginResponseDto>>, IAuditableComma
     /// </summary>
     public required string Password { get; init; }
 
+    /// <summary>
+    /// Device fingerprint for trusted device check (optional)
+    /// </summary>
+    public string? DeviceFingerprint { get; init; }
+
     public AuditAction AuditAction => AuditAction.Login;
 
     public string GetAuditDescription() => $"User login attempt for email: {Email}";

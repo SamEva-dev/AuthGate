@@ -18,4 +18,24 @@ public record Verify2FACommand : IRequest<Result<LoginResponseDto>>
     /// 6-digit TOTP code from authenticator app
     /// </summary>
     public required string Code { get; init; }
+
+    /// <summary>
+    /// Gets or sets whether to remember this device for 30 days
+    /// </summary>
+    public bool RememberDevice { get; set; }
+
+    /// <summary>
+    /// Gets or sets the device fingerprint for trusted device storage
+    /// </summary>
+    public string? DeviceFingerprint { get; set; }
+
+    /// <summary>
+    /// Gets or sets the User-Agent for device name extraction
+    /// </summary>
+    public string? UserAgent { get; set; }
+
+    /// <summary>
+    /// Gets or sets the IP address of the device
+    /// </summary>
+    public string? IpAddress { get; set; }
 }

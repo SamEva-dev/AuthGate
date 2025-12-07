@@ -18,6 +18,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<LoginRes
     private readonly UserManager<User> _userManager;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IMfaSecretRepository _mfaSecretRepository;
+    private readonly ITrustedDeviceRepository _trustedDeviceRepository;
     private readonly IJwtService _jwtService;
     private readonly IUserRoleService _userRoleService;
     private readonly ILogger<LoginCommandHandler> _logger;
@@ -27,6 +28,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<LoginRes
         UserManager<User> userManager,
         IUnitOfWork unitOfWork,
         IMfaSecretRepository mfaSecretRepository,
+        ITrustedDeviceRepository trustedDeviceRepository,
         IJwtService jwtService,
         IUserRoleService userRoleService,
         ILogger<LoginCommandHandler> logger)
@@ -35,6 +37,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<LoginRes
         _userManager = userManager;
         _unitOfWork = unitOfWork;
         _mfaSecretRepository = mfaSecretRepository;
+        _trustedDeviceRepository = trustedDeviceRepository;
         _jwtService = jwtService;
         _userRoleService = userRoleService;
         _logger = logger;
@@ -84,6 +87,56 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<LoginRes
             var mfaSecret = await _mfaSecretRepository.GetByUserIdAsync(user.Id, cancellationToken);
             if (mfaSecret?.IsEnabled == true)
             {
+                // Check if device is trusted (skip 2FA if yes)
+                if (!string.IsNullOrEmpty(request.DeviceFingerprint))
+                {
+                    var trustedDevice = await _trustedDeviceRepository
+                        .GetByUserAndFingerprintAsync(user.Id, request.DeviceFingerprint, cancellationToken);
+                    
+                    if (trustedDevice?.IsValid() == true)
+                    {
+                        _logger.LogInformation("User {UserId} login from trusted device: {DeviceName}", user.Id, trustedDevice.DeviceName);
+                        
+                        // Update last used
+                        trustedDevice.UpdateLastUsed();
+                        _trustedDeviceRepository.Update(trustedDevice);
+                        await _unitOfWork.SaveChangesAsync(cancellationToken);
+                        
+                        // Skip 2FA! Generate tokens directly
+                        var trustedRoles = await _userRoleService.GetUserRolesAsync(user);
+                        var trustedPermissions = await _userRoleService.GetUserPermissionsAsync(user);
+                        var trustedAccessToken = _jwtService.GenerateAccessToken(user.Id, user.Email!, trustedRoles, trustedPermissions, true, user.TenantId);
+                        var trustedRefreshToken = _jwtService.GenerateRefreshToken();
+                        var trustedJwtId = _jwtService.GetJwtId(trustedAccessToken) ?? Guid.NewGuid().ToString();
+                        
+                        var trustedRefreshTokenEntity = new Domain.Entities.RefreshToken
+                        {
+                            Id = Guid.NewGuid(),
+                            UserId = user.Id,
+                            Token = trustedRefreshToken,
+                            JwtId = trustedJwtId,
+                            ExpiresAtUtc = DateTime.UtcNow.AddDays(7),
+                            CreatedAtUtc = DateTime.UtcNow
+                        };
+                        await _unitOfWork.RefreshTokens.AddAsync(trustedRefreshTokenEntity, cancellationToken);
+                        
+                        user.LastLoginAtUtc = DateTime.UtcNow;
+                        await _userManager.UpdateAsync(user);
+                        await _unitOfWork.SaveChangesAsync(cancellationToken);
+                        
+                        _logger.LogInformation("User {UserId} logged in successfully (trusted device, 2FA skipped)", user.Id);
+                        
+                        return Result.Success(new LoginResponseDto
+                        {
+                            AccessToken = trustedAccessToken,
+                            RefreshToken = trustedRefreshToken,
+                            ExpiresIn = 900,
+                            RequiresMfa = false
+                        });
+                    }
+                }
+                
+                // Device not trusted or no fingerprint provided → Require 2FA
                 // Generate temporary token for MFA verification (short-lived, 5 minutes)
                 var mfaToken = Guid.NewGuid().ToString("N"); // Simple GUID for now
                 

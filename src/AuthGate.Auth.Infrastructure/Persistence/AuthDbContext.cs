@@ -31,6 +31,7 @@ public class AuthDbContext : IdentityDbContext<
     public DbSet<RecoveryCode> RecoveryCodes => Set<RecoveryCode>();
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
     public DbSet<UserInvitation> UserInvitations => Set<UserInvitation>();
+    public DbSet<TrustedDevice> TrustedDevices => Set<TrustedDevice>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
