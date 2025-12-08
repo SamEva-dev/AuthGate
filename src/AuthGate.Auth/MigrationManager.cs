@@ -17,7 +17,7 @@ public static class MigrationManager
             // Apply AuthDbContext migrations
             var authDb = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
             Log.Information("Applying AuthGate database migrations...");
-            authDb.Database.Migrate();
+                authDb.Database.Migrate();
             Log.Information("✅ AuthGate database migrated successfully.");
             
             // Apply AuditDbContext migrations
