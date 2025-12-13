@@ -35,4 +35,8 @@
     <ProjectReference Include="..\AuthGate.Auth.Domain\AuthGate.Auth.Domain.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Persistence\Factories\" />
+  </ItemGroup>
+
 </Project>

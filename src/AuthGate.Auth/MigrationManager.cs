@@ -23,7 +23,7 @@ public static class MigrationManager
             // Apply AuditDbContext migrations
             var auditDb = scope.ServiceProvider.GetRequiredService<AuditDbContext>();
             Log.Information("Applying Audit database migrations...");
-            auditDb.Database.Migrate();
+                auditDb.Database.Migrate();
             Log.Information("✅ Audit database migrated successfully.");
         }
         catch (Exception ex)

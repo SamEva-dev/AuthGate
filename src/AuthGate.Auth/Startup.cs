@@ -22,8 +22,8 @@ public class Startup
     public void ConfigureServices(IServiceCollection services)
     {
         // Add Application and Infrastructure layers
-        services.AddApplication();
-        services.AddInfrastructure(Configuration);
+        //services.AddApplication();
+        //services.AddInfrastructure(Configuration);
 
         // HttpContextAccessor
         services.AddHttpContextAccessor();
@@ -36,6 +36,11 @@ public class Startup
 
         // Controllers
         services.AddControllers();
+
+        // Health Checks
+        services.AddHealthChecks()
+            .AddDbContextCheck<AuthGate.Auth.Infrastructure.Persistence.AuthDbContext>("database", tags: new[] { "ready" })
+            .AddCheck("self", () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy(), tags: new[] { "live" });
 
         // CORS
         services.AddCors(options =>
@@ -163,14 +168,40 @@ public class Startup
         {
             endpoints.MapControllers();
             
-            endpoints.MapGet("/health", async context =>
+            // Health Check Endpoints (pour Kubernetes/Fly.io)
+            endpoints.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
             {
-                await context.Response.WriteAsJsonAsync(new
+                Predicate = _ => true,
+                ResponseWriter = async (context, report) =>
                 {
-                    status = "Healthy",
-                    timestamp = DateTime.UtcNow,
-                    service = "AuthGate"
-                });
+                    context.Response.ContentType = "application/json";
+                    var result = System.Text.Json.JsonSerializer.Serialize(new
+                    {
+                        status = report.Status.ToString(),
+                        timestamp = DateTime.UtcNow,
+                        service = "AuthGate",
+                        checks = report.Entries.Select(e => new
+                        {
+                            name = e.Key,
+                            status = e.Value.Status.ToString(),
+                            description = e.Value.Description,
+                            duration = e.Value.Duration.TotalMilliseconds
+                        })
+                    });
+                    await context.Response.WriteAsync(result);
+                }
+            });
+
+            // Readiness probe
+            endpoints.MapHealthChecks("/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+            {
+                Predicate = check => check.Tags.Contains("ready")
+            });
+
+            // Liveness probe
+            endpoints.MapHealthChecks("/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+            {
+                Predicate = check => check.Tags.Contains("live")
             });
         });
     }
