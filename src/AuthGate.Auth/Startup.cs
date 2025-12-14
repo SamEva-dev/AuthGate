@@ -22,8 +22,8 @@ public class Startup
     public void ConfigureServices(IServiceCollection services)
     {
         // Add Application and Infrastructure layers
-        //services.AddApplication();
-        //services.AddInfrastructure(Configuration);
+        services.AddApplication();
+        services.AddInfrastructure(Configuration);
 
         // HttpContextAccessor
         services.AddHttpContextAccessor();
@@ -151,8 +151,6 @@ public class Startup
                 c.RoutePrefix = string.Empty; // Swagger at root
             });
         }
-
-        app.UseHttpsRedirection();
         
         app.UseRouting();
 

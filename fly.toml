@@ -1,5 +1,5 @@
 # Fly.io configuration for AuthGate
-app = "locaguest-authgate"
+app = "authgate-api"
 primary_region = "cdg" # Paris
 
 [build]
