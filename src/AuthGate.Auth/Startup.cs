@@ -25,6 +25,8 @@ public class Startup
         services.AddApplication();
         services.AddInfrastructure(Configuration);
 
+        services.AddIdentityService();
+
         // HttpContextAccessor
         services.AddHttpContextAccessor();
 
@@ -144,11 +146,16 @@ public class Startup
             seeder.SeedAsync().Wait();
             
             app.UseDeveloperExceptionPage();
+        }
+
+        var swaggerEnabled = env.IsDevelopment() || Configuration.GetValue<bool>("Swagger:Enabled");
+        if (swaggerEnabled)
+        {
             app.UseSwagger();
             app.UseSwaggerUI(c =>
             {
                 c.SwaggerEndpoint("/swagger/v1/swagger.json", "AuthGate API v1");
-                c.RoutePrefix = string.Empty; // Swagger at root
+                c.RoutePrefix = "swagger";
             });
         }
         
