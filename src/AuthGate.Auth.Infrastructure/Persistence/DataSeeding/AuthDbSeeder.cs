@@ -55,6 +55,23 @@ public class AuthDbSeeder
         }
     }
 
+    public async Task EnsureRolesAndPermissionsAsync()
+    {
+        try
+        {
+            await SeedRolesAsync();
+            await SeedPermissionsAsync();
+            await SeedRolePermissionsAsync();
+
+            _logger.LogInformation("Roles and permissions ensured successfully");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "An error occurred while ensuring roles and permissions");
+            throw;
+        }
+    }
+
     private async Task SeedRolesAsync()
     {
         var roles = new[]

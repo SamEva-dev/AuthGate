@@ -6,6 +6,7 @@ using AuthGate.Auth.Extensions;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Serilog;
 using System.Text;
 
 namespace AuthGate.Auth;
@@ -148,6 +149,13 @@ public class Startup
             app.UseDeveloperExceptionPage();
         }
 
+        if (!env.IsDevelopment() && Configuration.GetValue<bool>("Identity:SeedRoles"))
+        {
+            using var scope = app.ApplicationServices.CreateScope();
+            var seeder = scope.ServiceProvider.GetRequiredService<AuthGate.Auth.Infrastructure.Persistence.DataSeeding.AuthDbSeeder>();
+            seeder.EnsureRolesAndPermissionsAsync().Wait();
+        }
+
         var swaggerEnabled = env.IsDevelopment() || Configuration.GetValue<bool>("Swagger:Enabled");
         if (swaggerEnabled)
         {
@@ -158,6 +166,8 @@ public class Startup
                 c.RoutePrefix = "swagger";
             });
         }
+
+        app.UseSerilogRequestLogging();
         
         app.UseRouting();
 
