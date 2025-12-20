@@ -268,8 +268,8 @@ public class AuthDbSeeder
 
     private async Task SeedDemoUserAsync()
     {
-        const string demoEmail = "demo@locaguest.com";
-        const string demoPassword = "demo123";
+        const string demoEmail = "demo1@locaguest.com";
+        const string demoPassword = "demo@123";
 
         var existingDemo = await _userManager.FindByEmailAsync(demoEmail);
         if (existingDemo == null)
