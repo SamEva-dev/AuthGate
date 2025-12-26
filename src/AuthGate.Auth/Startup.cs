@@ -8,6 +8,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Serilog;
 using System.Text;
+using AuthGate.Auth.Infrastructure.Jobs;
 
 namespace AuthGate.Auth;
 
@@ -39,6 +40,9 @@ public class Startup
 
         // Controllers
         services.AddControllers();
+
+        services.Configure<AuditRetentionOptions>(Configuration.GetSection("AuditRetention"));
+        services.AddHostedService<AuditRetentionHostedService>();
 
         // Health Checks
         services.AddHealthChecks()
