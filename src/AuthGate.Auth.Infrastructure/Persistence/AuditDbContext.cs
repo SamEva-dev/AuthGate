@@ -1,5 +1,6 @@
 using AuthGate.Auth.Domain.Common;
 using AuthGate.Auth.Domain.Entities;
+using AuthGate.Auth.Application.Common.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
 namespace AuthGate.Auth.Infrastructure.Persistence;
@@ -7,7 +8,7 @@ namespace AuthGate.Auth.Infrastructure.Persistence;
 /// <summary>
 /// Separate database context for audit logs
 /// </summary>
-public class AuditDbContext : DbContext
+public class AuditDbContext : DbContext, IAuditDbContext
 {
     public AuditDbContext(DbContextOptions<AuditDbContext> options) : base(options)
     {

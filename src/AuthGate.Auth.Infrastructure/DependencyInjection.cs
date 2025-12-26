@@ -94,6 +94,8 @@ public static class DependencyInjection
             }
         });
 
+        services.AddScoped<AuthGate.Auth.Application.Common.Interfaces.IAuditDbContext>(sp => sp.GetRequiredService<AuditDbContext>());
+
         // Repositories (custom)
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IRoleRepository, RoleRepository>();
