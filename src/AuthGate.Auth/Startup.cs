@@ -143,6 +143,7 @@ public class Startup
 
     public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
     {
+        EnsureAuthGateLogDirectories();
         // Seed database in development
         if (env.IsDevelopment())
         {
@@ -223,5 +224,26 @@ public class Startup
                 Predicate = check => check.Tags.Contains("live")
             });
         });
+    }
+
+    private void EnsureAuthGateLogDirectories()
+    {
+        // 1) Récupère la variable
+        var home = Environment.GetEnvironmentVariable("AUTHGATE_HOME");
+
+        // 2) Si elle n’existe pas au runtime, on la force (au niveau Process)
+        //    Important : mets bien un trailing backslash : E:\ (pas E:)
+        if (string.IsNullOrWhiteSpace(home))
+        {
+            home = @"E:\";
+            Environment.SetEnvironmentVariable("AUTHGATE_HOME", home, EnvironmentVariableTarget.Process);
+        }
+
+        // 3) Crée les dossiers attendus par tes sinks fichier
+        var authGateDir = Path.Combine(home, "log", "AuthGate");
+        var efDir = Path.Combine(authGateDir, "EntityFramework");
+
+        Directory.CreateDirectory(authGateDir);
+        Directory.CreateDirectory(efDir);
     }
 }

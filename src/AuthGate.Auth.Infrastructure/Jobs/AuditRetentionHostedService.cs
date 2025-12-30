@@ -64,7 +64,7 @@ public class AuditRetentionHostedService : BackgroundService
 
         var deletedAuditLogs = await auditDbContext.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""AuditLogs"" WHERE ""CreatedAtUtc"" < {0}",
-            cutoffDate,
+            new object[] { cutoffDate },
             cancellationToken);
 
         _logger.LogInformation(
