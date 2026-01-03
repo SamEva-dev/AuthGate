@@ -58,9 +58,9 @@ namespace AuthGate.Auth.Infrastructure.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    TenantId = table.Column<Guid>(type: "uuid", nullable: false),
-                    TenantCode = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
-                    TenantName = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    OrganizationId = table.Column<Guid>(type: "uuid", nullable: false),
+                    OrganizationCode = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    OrganizationName = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
                     Email = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
                     Role = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
                     Token = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
@@ -93,7 +93,7 @@ namespace AuthGate.Auth.Infrastructure.Migrations
                     LockoutEndUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     LastLoginAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     MfaEnabled = table.Column<bool>(type: "boolean", nullable: false),
-                    TenantId = table.Column<Guid>(type: "uuid", nullable: true),
+                    organization_id = table.Column<Guid>(type: "uuid", nullable: true),
                     CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     CreatedBy = table.Column<Guid>(type: "uuid", nullable: true),
@@ -496,9 +496,9 @@ namespace AuthGate.Auth.Infrastructure.Migrations
                 column: "ExpiresAt");
 
             migrationBuilder.CreateIndex(
-                name: "IX_UserInvitations_TenantId_Email",
+                name: "IX_UserInvitations_OrganizationId_Email",
                 table: "UserInvitations",
-                columns: new[] { "TenantId", "Email" });
+                columns: new[] { "OrganizationId", "Email" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_UserInvitations_Token",
@@ -520,6 +520,11 @@ namespace AuthGate.Auth.Infrastructure.Migrations
                 name: "EmailIndex",
                 table: "Users",
                 column: "NormalizedEmail");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Users_organization_id",
+                table: "Users",
+                column: "organization_id");
 
             migrationBuilder.CreateIndex(
                 name: "UserNameIndex",

@@ -1,10 +1,10 @@
 using AuthGate.Auth.Application.Common.Interfaces;
+using AuthGate.Auth.Infrastructure.Security;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
-using System.Text;
 
 namespace AuthGate.Auth.Infrastructure.Services;
 
@@ -21,29 +21,31 @@ public class JwtService : IJwtService
         _rsaKeyService = rsaKeyService;
     }
 
-    public string GenerateAccessToken(Guid userId, string email, IEnumerable<string> roles, IEnumerable<string> permissions, bool mfaEnabled, Guid? tenantId = null)
+    public string GenerateAccessToken(Guid userId, string email, IEnumerable<string> roles, IEnumerable<string> permissions, bool mfaEnabled, Guid organizationId)
     {
+        if (organizationId == Guid.Empty)
+        {
+            throw new InvalidOperationException("Cannot issue access token without OrganizationId.");
+        }
+
         var claims = new List<Claim>
         {
             new(JwtRegisteredClaimNames.Sub, userId.ToString()),
             new(JwtRegisteredClaimNames.Email, email),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-            new("mfa_enabled", mfaEnabled.ToString().ToLower())
+            new("mfa_enabled", mfaEnabled.ToString().ToLower()),
+            new(ClaimNames.OrganizationId, organizationId.ToString("D"))
         };
-
-        // Add tenant_id claim for multi-tenant support
-        if (tenantId.HasValue)
-        {
-            claims.Add(new Claim("tenant_id", tenantId.Value.ToString()));
-        }
 
         foreach (var role in roles)
         {
+            claims.Add(new Claim(ClaimNames.Roles, role));
             claims.Add(new Claim(ClaimTypes.Role, role));
         }
 
         foreach (var permission in permissions)
         {
+            claims.Add(new Claim(ClaimNames.Permissions, permission));
             claims.Add(new Claim("permission", permission));
         }
 
@@ -67,33 +69,6 @@ public class JwtService : IJwtService
         using var rng = RandomNumberGenerator.Create();
         rng.GetBytes(randomNumber);
         return Convert.ToBase64String(randomNumber);
-    }
-
-    public ClaimsPrincipal? ValidateToken(string token)
-    {
-        try
-        {
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Secret"] ?? throw new InvalidOperationException("JWT Secret not configured")));
-
-            var tokenValidationParameters = new TokenValidationParameters
-            {
-                ValidateIssuerSigningKey = true,
-                IssuerSigningKey = key,
-                ValidateIssuer = true,
-                ValidIssuer = _configuration["Jwt:Issuer"],
-                ValidateAudience = true,
-                ValidAudience = _configuration["Jwt:Audience"],
-                ValidateLifetime = true,
-                ClockSkew = TimeSpan.Zero
-            };
-
-            var principal = _tokenHandler.ValidateToken(token, tokenValidationParameters, out var validatedToken);
-            return principal;
-        }
-        catch
-        {
-            return null;
-        }
     }
 
     public string? GetJwtId(string token)

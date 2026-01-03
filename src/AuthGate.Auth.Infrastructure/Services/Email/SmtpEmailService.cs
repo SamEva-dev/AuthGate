@@ -26,13 +26,13 @@ public class SmtpEmailService : IEmailService
         string toEmail,
         string toName,
         string inviterName,
-        string tenantName,
+        string organizationName,
         string role,
         string invitationUrl,
         DateTime expiresAt,
         CancellationToken cancellationToken = default)
     {
-        var subject = $"Invitation à rejoindre {tenantName} sur LocaGuest";
+        var subject = $"Invitation à rejoindre {organizationName} sur LocaGuest";
         
         var htmlBody = $@"
 <!DOCTYPE html>
@@ -57,11 +57,11 @@ public class SmtpEmailService : IEmailService
         </div>
         <div class=""content"">
             <h2>Bonjour,</h2>
-            <p><strong>{inviterName}</strong> vous invite à rejoindre <strong>{tenantName}</strong> sur LocaGuest.</p>
+            <p><strong>{inviterName}</strong> vous invite à rejoindre <strong>{organizationName}</strong> sur LocaGuest.</p>
             
             <div class=""info-box"">
                 <p><strong>Votre rôle:</strong> {role}</p>
-                <p><strong>Organisation:</strong> {tenantName}</p>
+                <p><strong>Organisation:</strong> {organizationName}</p>
             </div>
 
             <p>En acceptant cette invitation, vous pourrez accéder à la plateforme et collaborer avec votre équipe pour gérer vos biens immobiliers.</p>
@@ -88,10 +88,10 @@ public class SmtpEmailService : IEmailService
         var textBody = $@"
 Bonjour,
 
-{inviterName} vous invite à rejoindre {tenantName} sur LocaGuest.
+{inviterName} vous invite à rejoindre {organizationName} sur LocaGuest.
 
 Votre rôle: {role}
-Organisation: {tenantName}
+Organisation: {organizationName}
 
 Pour accepter cette invitation, cliquez sur le lien suivant:
 {invitationUrl}
@@ -110,7 +110,7 @@ Si vous n'avez pas demandé cette invitation, vous pouvez ignorer cet email en t
     public async Task SendWelcomeEmailAsync(
         string toEmail,
         string firstName,
-        string tenantName,
+        string organizationName,
         CancellationToken cancellationToken = default)
     {
         var subject = "Bienvenue sur LocaGuest! 🎉";
@@ -137,7 +137,7 @@ Si vous n'avez pas demandé cette invitation, vous pouvez ignorer cet email en t
         </div>
         <div class=""content"">
             <h2>Bonjour {firstName},</h2>
-            <p>Nous sommes ravis de vous accueillir dans <strong>{tenantName}</strong>!</p>
+            <p>Nous sommes ravis de vous accueillir dans <strong>{organizationName}</strong>!</p>
 
             <p>LocaGuest est votre plateforme de gestion immobilière complète. Voici ce que vous pouvez faire:</p>
 

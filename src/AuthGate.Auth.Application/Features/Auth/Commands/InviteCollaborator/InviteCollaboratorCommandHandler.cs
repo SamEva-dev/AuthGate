@@ -17,7 +17,7 @@ public class InviteCollaboratorCommandHandler : IRequestHandler<InviteCollaborat
     private readonly IAuthDbContext _context;
     private readonly UserManager<User> _userManager;
     private readonly ICurrentUserService _currentUserService;
-    private readonly ITenantContext _tenantContext;
+    private readonly IOrganizationContext _organizationContext;
     private readonly IEmailService _emailService;
     private readonly IConfiguration _configuration;
     private readonly ILogger<InviteCollaboratorCommandHandler> _logger;
@@ -26,7 +26,7 @@ public class InviteCollaboratorCommandHandler : IRequestHandler<InviteCollaborat
         IAuthDbContext context,
         UserManager<User> userManager,
         ICurrentUserService currentUserService,
-        ITenantContext tenantContext,
+        IOrganizationContext organizationContext,
         IEmailService emailService,
         IConfiguration configuration,
         ILogger<InviteCollaboratorCommandHandler> logger)
@@ -34,7 +34,7 @@ public class InviteCollaboratorCommandHandler : IRequestHandler<InviteCollaborat
         _context = context;
         _userManager = userManager;
         _currentUserService = currentUserService;
-        _tenantContext = tenantContext;
+        _organizationContext = organizationContext;
         _emailService = emailService;
         _configuration = configuration;
         _logger = logger;
@@ -66,14 +66,14 @@ public class InviteCollaboratorCommandHandler : IRequestHandler<InviteCollaborat
             }
 
             // 2. Validate tenant context
-            if (!_tenantContext.TenantId.HasValue)
+            if (!_organizationContext.OrganizationId.HasValue)
             {
                 return Result.Failure<InviteCollaboratorResponse>("Tenant context not found");
             }
 
-            var tenantId = _tenantContext.TenantId.Value;
-            var tenantCode = _tenantContext.TenantCode ?? "Unknown";
-            var tenantName = _tenantContext.TenantName ?? "Unknown Organization";
+            var organizationId = _organizationContext.OrganizationId.Value;
+            var organizationCode = _organizationContext.OrganizationCode ?? "Unknown";
+            var organizationName = _organizationContext.OrganizationName ?? "Unknown Organization";
 
             // 3. Validate role
             var allowedRoles = new[] { Domain.Constants.Roles.TenantAdmin, Domain.Constants.Roles.TenantManager, Domain.Constants.Roles.TenantUser, Domain.Constants.Roles.ReadOnly };
@@ -92,7 +92,7 @@ public class InviteCollaboratorCommandHandler : IRequestHandler<InviteCollaborat
 
             // 5. Check if invitation already exists and is valid
             var existingInvitation = await _context.UserInvitations
-                .Where(i => i.Email == request.Email && i.TenantId == tenantId && i.Status == InvitationStatus.Pending)
+                .Where(i => i.Email == request.Email && i.OrganizationId == organizationId && i.Status == InvitationStatus.Pending)
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (existingInvitation != null && existingInvitation.IsValid())
@@ -107,9 +107,9 @@ public class InviteCollaboratorCommandHandler : IRequestHandler<InviteCollaborat
             var invitation = new UserInvitation
             {
                 Id = Guid.NewGuid(),
-                TenantId = tenantId,
-                TenantCode = tenantCode,
-                TenantName = tenantName,
+                OrganizationId = organizationId,
+                OrganizationCode = organizationCode,
+                OrganizationName = organizationName,
                 Email = request.Email,
                 Role = request.Role,
                 Token = token,
@@ -135,7 +135,7 @@ public class InviteCollaboratorCommandHandler : IRequestHandler<InviteCollaborat
                     toEmail: request.Email,
                     toName: request.Email.Split('@')[0], // Use email prefix as default name
                     inviterName: $"{inviter.FirstName} {inviter.LastName}",
-                    tenantName: tenantName,
+                    organizationName: organizationName,
                     role: request.Role,
                     invitationUrl: invitationUrl,
                     expiresAt: expiresAt,
@@ -153,8 +153,8 @@ public class InviteCollaboratorCommandHandler : IRequestHandler<InviteCollaborat
             }
 
             _logger.LogInformation(
-                "Invitation created: {Email} invited to {TenantCode} as {Role} by {InviterId}",
-                request.Email, tenantCode, request.Role, inviterId.Value);
+                "Invitation created: {Email} invited to {OrganizationCode} as {Role} by {InviterId}",
+                request.Email, organizationCode, request.Role, inviterId.Value);
 
             var response = new InviteCollaboratorResponse
             {

@@ -104,7 +104,12 @@ public class Verify2FACommandHandler : IRequestHandler<Verify2FACommand, Result<
             var permissions = await _userRoleService.GetUserPermissionsAsync(user);
 
             // 8. Generate JWT tokens
-            var accessToken = _jwtService.GenerateAccessToken(user.Id, user.Email!, roles, permissions, true, user.TenantId);
+            if (!user.OrganizationId.HasValue || user.OrganizationId.Value == Guid.Empty)
+            {
+                return Result.Failure<LoginResponseDto>("Cannot issue access token without OrganizationId.");
+            }
+
+            var accessToken = _jwtService.GenerateAccessToken(user.Id, user.Email!, roles, permissions, true, user.OrganizationId.Value);
             var refreshToken = _jwtService.GenerateRefreshToken();
             var jwtId = _jwtService.GetJwtId(accessToken) ?? Guid.NewGuid().ToString();
 

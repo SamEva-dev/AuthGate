@@ -93,7 +93,12 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, R
         var roles = await _userRoleService.GetUserRolesAsync(user);
         var permissions = await _userRoleService.GetUserPermissionsAsync(user);
 
-        var newAccessToken = _jwtService.GenerateAccessToken(user.Id, user.Email!, roles, permissions, user.MfaEnabled, user.TenantId);
+        if (!user.OrganizationId.HasValue || user.OrganizationId.Value == Guid.Empty)
+        {
+            return Result.Failure<TokenResponseDto>("Cannot issue access token without OrganizationId.");
+        }
+
+        var newAccessToken = _jwtService.GenerateAccessToken(user.Id, user.Email!, roles, permissions, user.MfaEnabled, user.OrganizationId.Value);
         var newRefreshToken = _jwtService.GenerateRefreshToken();
         var jwtId = _jwtService.GetJwtId(newAccessToken) ?? Guid.NewGuid().ToString();
 

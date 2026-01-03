@@ -12,14 +12,14 @@ public class UserInvitationConfiguration : IEntityTypeConfiguration<UserInvitati
         
         builder.HasKey(ui => ui.Id);
         
-        builder.Property(ui => ui.TenantId)
+        builder.Property(ui => ui.OrganizationId)
             .IsRequired();
         
-        builder.Property(ui => ui.TenantCode)
+        builder.Property(ui => ui.OrganizationCode)
             .IsRequired()
             .HasMaxLength(20);
         
-        builder.Property(ui => ui.TenantName)
+        builder.Property(ui => ui.OrganizationName)
             .IsRequired()
             .HasMaxLength(200);
         
@@ -45,7 +45,7 @@ public class UserInvitationConfiguration : IEntityTypeConfiguration<UserInvitati
         builder.HasIndex(ui => ui.Token)
             .IsUnique();
         
-        builder.HasIndex(ui => new { ui.TenantId, ui.Email });
+        builder.HasIndex(ui => new { ui.OrganizationId, ui.Email });
         
         builder.HasIndex(ui => new { ui.Email, ui.Status });
         

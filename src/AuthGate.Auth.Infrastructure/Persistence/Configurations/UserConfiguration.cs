@@ -14,6 +14,11 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.LastName)
             .HasMaxLength(100);
 
+        builder.Property(u => u.OrganizationId)
+            .HasColumnName("organization_id");
+
+        builder.HasIndex(u => u.OrganizationId);
+
         builder.HasMany(u => u.RefreshTokens)
             .WithOne(rt => rt.User)
             .HasForeignKey(rt => rt.UserId)

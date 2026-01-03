@@ -52,7 +52,7 @@ public class User : IdentityUser<Guid>, IAuditableEntity
     /// Gets or sets the tenant ID for multi-tenant isolation in LocaGuest
     /// Required for all users except SuperAdmin
     /// </summary>
-    public Guid? TenantId { get; set; }
+    public Guid? OrganizationId { get; set; }
 
     /// <inheritdoc/>
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;

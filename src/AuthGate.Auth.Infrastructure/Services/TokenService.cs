@@ -35,6 +35,11 @@ public class TokenService : ITokenService
         var roles = await _userRoleService.GetUserRolesAsync(user);
         var permissions = await _userRoleService.GetUserPermissionsAsync(user);
 
+        if (!user.OrganizationId.HasValue || user.OrganizationId.Value == Guid.Empty)
+        {
+            throw new InvalidOperationException("Cannot issue access token without OrganizationId.");
+        }
+
         // Generate tokens
         var accessToken = _jwtService.GenerateAccessToken(
             user.Id,
@@ -42,7 +47,7 @@ public class TokenService : ITokenService
             roles,
             permissions,
             user.MfaEnabled,
-            user.TenantId
+            user.OrganizationId.Value
         );
 
         var refreshToken = _jwtService.GenerateRefreshToken();

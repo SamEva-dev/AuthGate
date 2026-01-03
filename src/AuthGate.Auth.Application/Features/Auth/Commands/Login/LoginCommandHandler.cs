@@ -105,7 +105,12 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<LoginRes
                         // Skip 2FA! Generate tokens directly
                         var trustedRoles = await _userRoleService.GetUserRolesAsync(user);
                         var trustedPermissions = await _userRoleService.GetUserPermissionsAsync(user);
-                        var trustedAccessToken = _jwtService.GenerateAccessToken(user.Id, user.Email!, trustedRoles, trustedPermissions, true, user.TenantId);
+                        if (!user.OrganizationId.HasValue || user.OrganizationId.Value == Guid.Empty)
+                        {
+                            return Result.Failure<LoginResponseDto>("Cannot issue access token without OrganizationId.");
+                        }
+
+                        var trustedAccessToken = _jwtService.GenerateAccessToken(user.Id, user.Email!, trustedRoles, trustedPermissions, true, user.OrganizationId.Value);
                         var trustedRefreshToken = _jwtService.GenerateRefreshToken();
                         var trustedJwtId = _jwtService.GetJwtId(trustedAccessToken) ?? Guid.NewGuid().ToString();
                         
@@ -169,7 +174,12 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<LoginRes
 
             // Generate tokens (MFA is false here since we passed the check above)
             _logger.LogDebug("Generating access token");
-            var accessToken = _jwtService.GenerateAccessToken(user.Id, user.Email!, roles, permissions, false, user.TenantId);
+            if (!user.OrganizationId.HasValue || user.OrganizationId.Value == Guid.Empty)
+            {
+                return Result.Failure<LoginResponseDto>("Cannot issue access token without OrganizationId.");
+            }
+
+            var accessToken = _jwtService.GenerateAccessToken(user.Id, user.Email!, roles, permissions, false, user.OrganizationId.Value);
             _logger.LogDebug("Generating refresh token");
             var refreshToken = _jwtService.GenerateRefreshToken();
             _logger.LogDebug("Extracting JWT ID");

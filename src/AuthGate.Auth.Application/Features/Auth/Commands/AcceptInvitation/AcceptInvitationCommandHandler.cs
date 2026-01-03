@@ -56,7 +56,7 @@ public class AcceptInvitationCommandHandler : IRequestHandler<AcceptInvitationCo
                 EmailConfirmed = true,
                 FirstName = request.FirstName,
                 LastName = request.LastName,
-                TenantId = invitation.TenantId,
+                OrganizationId = invitation.OrganizationId,
                 IsActive = true,
                 MfaEnabled = false,
                 CreatedAtUtc = DateTime.UtcNow
@@ -82,9 +82,9 @@ public class AcceptInvitationCommandHandler : IRequestHandler<AcceptInvitationCo
             {
                 UserId = user.Id,
                 Email = user.Email!,
-                TenantId = invitation.TenantId,
-                TenantCode = invitation.TenantCode,
-                TenantName = invitation.TenantName,
+                OrganizationId = invitation.OrganizationId,
+                OrganizationCode = invitation.OrganizationCode,
+                OrganizationName = invitation.OrganizationName,
                 Role = invitation.Role,
                 AccessToken = accessToken,
                 RefreshToken = refreshToken

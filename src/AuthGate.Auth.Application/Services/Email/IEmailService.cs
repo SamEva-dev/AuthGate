@@ -12,7 +12,7 @@ public interface IEmailService
         string toEmail,
         string toName,
         string inviterName,
-        string tenantName,
+        string organizationName,
         string role,
         string invitationUrl,
         DateTime expiresAt,
@@ -24,7 +24,7 @@ public interface IEmailService
     Task SendWelcomeEmailAsync(
         string toEmail,
         string firstName,
-        string tenantName,
+        string organizationName,
         CancellationToken cancellationToken = default);
 
     /// <summary>

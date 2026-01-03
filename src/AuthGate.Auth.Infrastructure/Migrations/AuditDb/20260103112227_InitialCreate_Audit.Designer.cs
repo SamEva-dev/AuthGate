@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace AuthGate.Auth.Infrastructure.Migrations.AuditDb
 {
     [DbContext(typeof(AuditDbContext))]
-    [Migration("20251212205736_InitialCreate")]
-    partial class InitialCreate
+    [Migration("20260103112227_InitialCreate_Audit")]
+    partial class InitialCreate_Audit
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

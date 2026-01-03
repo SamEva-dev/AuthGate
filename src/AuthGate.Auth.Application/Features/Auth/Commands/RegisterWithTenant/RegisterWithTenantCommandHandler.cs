@@ -13,7 +13,7 @@ namespace AuthGate.Auth.Application.Features.Auth.Commands.RegisterWithTenant;
 /// <summary>
 /// Orchestrates the registration workflow:
 /// 1. Call LocaGuest API to create Organization (Tenant)
-/// 2. Create User in AuthGate with TenantId
+/// 2. Create User in AuthGate with OrganizationId
 /// 3. Assign TenantOwner role
 /// 4. Generate JWT with tenant claims
 /// </summary>
@@ -95,7 +95,7 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
             
             _logger.LogInformation("Organization created: {Code} - {Name}", organization.Code, organization.Name);
 
-            // 3. Create User in AuthGate with TenantId
+            // 3. Create User in AuthGate with OrganizationId
             var user = new User
             {
                 Id = Guid.NewGuid(),
@@ -104,7 +104,7 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
                 EmailConfirmed = true, // Auto-confirm for now
                 FirstName = request.FirstName,
                 LastName = request.LastName,
-                TenantId = organization.OrganizationId, // Link to LocaGuest Organization
+                OrganizationId = organization.OrganizationId, // Link to LocaGuest Organization
                 IsActive = true,
                 MfaEnabled = false,
                 CreatedAtUtc = DateTime.UtcNow
@@ -142,16 +142,16 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
             var (accessToken, refreshToken) = await _tokenService.GenerateTokensAsync(user);
 
             _logger.LogInformation(
-                "User registered successfully: {UserId} - {Email} - Tenant: {TenantCode}",
+                "User registered successfully: {UserId} - {Email} - Organization: {OrganizationCode}",
                 user.Id, user.Email, organization.Code);
 
             var responseDto = new RegisterWithTenantResponse
             {
                 UserId = user.Id,
                 Email = user.Email!,
-                TenantId = organization.OrganizationId,
-                TenantCode = organization.Code,
-                TenantName = organization.Name,
+                OrganizationId = organization.OrganizationId,
+                OrganizationCode = organization.Code,
+                OrganizationName = organization.Name,
                 AccessToken = accessToken,
                 RefreshToken = refreshToken,
                 Role = Domain.Constants.Roles.TenantOwner

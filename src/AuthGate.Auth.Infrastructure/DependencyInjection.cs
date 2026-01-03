@@ -143,7 +143,8 @@ public static class DependencyInjection
         // Multi-Tenant Services (NEW)
         services.AddScoped<ITokenService, TokenService>();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
-        services.AddScoped<ITenantContext, TenantContext>();
+        services.AddScoped<TenantContext>();
+        services.AddScoped<IOrganizationContext>(sp => sp.GetRequiredService<TenantContext>());
         services.AddScoped<IAuthDbContext>(sp => sp.GetRequiredService<AuthDbContext>());
 
         // Data Seeding

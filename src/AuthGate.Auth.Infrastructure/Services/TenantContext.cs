@@ -1,5 +1,6 @@
 using AuthGate.Auth.Application.Services;
 using AuthGate.Auth.Domain.Constants;
+using AuthGate.Auth.Infrastructure.Security;
 using Microsoft.AspNetCore.Http;
 using System.Security.Claims;
 
@@ -8,7 +9,7 @@ namespace AuthGate.Auth.Infrastructure.Services;
 /// <summary>
 /// Provides tenant context information extracted from JWT claims
 /// </summary>
-public class TenantContext : ITenantContext
+public class TenantContext : IOrganizationContext
 {
     private readonly IHttpContextAccessor _httpContextAccessor;
 
@@ -17,22 +18,34 @@ public class TenantContext : ITenantContext
         _httpContextAccessor = httpContextAccessor;
     }
 
-    public Guid? TenantId
+    public Guid? OrganizationId
     {
         get
         {
-            var tenantIdClaim = _httpContextAccessor.HttpContext?.User?.FindFirst("tenant_id");
-            if (tenantIdClaim != null && Guid.TryParse(tenantIdClaim.Value, out var tenantId))
+            // Prefer new organization_id claim (multi-tenant refactor), fallback to legacy tenant_id
+            var organizationIdClaim = _httpContextAccessor.HttpContext?.User?.FindFirst(ClaimNames.OrganizationId)?.Value;
+            if (!string.IsNullOrEmpty(organizationIdClaim) && Guid.TryParse(organizationIdClaim, out var orgId))
+            {
+                return orgId;
+            }
+
+            var legacyTenantIdClaim = _httpContextAccessor.HttpContext?.User?.FindFirst("tenant_id")?.Value;
+            if (!string.IsNullOrEmpty(legacyTenantIdClaim) && Guid.TryParse(legacyTenantIdClaim, out var tenantId))
             {
                 return tenantId;
             }
+
             return null;
         }
     }
 
-    public string? TenantCode => _httpContextAccessor.HttpContext?.User?.FindFirst("tenant_code")?.Value;
+    public string? OrganizationCode =>
+        _httpContextAccessor.HttpContext?.User?.FindFirst("organization_code")?.Value
+        ?? _httpContextAccessor.HttpContext?.User?.FindFirst("tenant_code")?.Value;
 
-    public string? TenantName => _httpContextAccessor.HttpContext?.User?.FindFirst("tenant_name")?.Value;
+    public string? OrganizationName =>
+        _httpContextAccessor.HttpContext?.User?.FindFirst("organization_name")?.Value
+        ?? _httpContextAccessor.HttpContext?.User?.FindFirst("tenant_name")?.Value;
 
     public bool IsAuthenticated => _httpContextAccessor.HttpContext?.User?.Identity?.IsAuthenticated ?? false;
 

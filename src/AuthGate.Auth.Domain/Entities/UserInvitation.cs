@@ -12,17 +12,17 @@ public class UserInvitation : IAuditableEntity
     /// <summary>
     /// Organization (Tenant) ID from LocaGuest
     /// </summary>
-    public Guid TenantId { get; set; }
+    public Guid OrganizationId { get; set; }
 
     /// <summary>
     /// Tenant code (T0001, T0002...)
     /// </summary>
-    public string TenantCode { get; set; } = string.Empty;
+    public string OrganizationCode { get; set; } = string.Empty;
 
     /// <summary>
     /// Organization name
     /// </summary>
-    public string TenantName { get; set; } = string.Empty;
+    public string OrganizationName { get; set; } = string.Empty;
 
     /// <summary>
     /// Email of the invited user
