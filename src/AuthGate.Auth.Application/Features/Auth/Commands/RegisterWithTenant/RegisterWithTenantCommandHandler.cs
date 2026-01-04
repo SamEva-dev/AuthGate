@@ -1,12 +1,12 @@
 using AuthGate.Auth.Application.Common;
+using AuthGate.Auth.Application.Common.Clients;
+using AuthGate.Auth.Application.Common.Clients.Models;
 using AuthGate.Auth.Application.Services;
 using AuthGate.Auth.Domain.Constants;
 using AuthGate.Auth.Domain.Entities;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging;
-using System.Net.Http;
-using System.Net.Http.Json;
 
 namespace AuthGate.Auth.Application.Features.Auth.Commands.RegisterWithTenant;
 
@@ -21,18 +21,18 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
 {
     private readonly UserManager<User> _userManager;
     private readonly ITokenService _tokenService;
-    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ILocaGuestProvisioningClient _provisioningClient;
     private readonly ILogger<RegisterWithTenantCommandHandler> _logger;
 
     public RegisterWithTenantCommandHandler(
         UserManager<User> userManager,
         ITokenService tokenService,
-        IHttpClientFactory httpClientFactory,
+        ILocaGuestProvisioningClient provisioningClient,
         ILogger<RegisterWithTenantCommandHandler> logger)
     {
         _userManager = userManager;
         _tokenService = tokenService;
-        _httpClientFactory = httpClientFactory;
+        _provisioningClient = provisioningClient;
         _logger = logger;
     }
 
@@ -53,47 +53,26 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
 
             // 2. Call LocaGuest API to create Organization (Tenant)
             _logger.LogInformation("Creating organization in LocaGuest for {Email}", request.Email);
-            
-            var httpClient = _httpClientFactory.CreateClient("LocaGuestApi");
-            
-            var createOrgRequest = new
+
+            var orgRequest = new ProvisionOrganizationRequest
             {
-                name = request.OrganizationName,
-                email = request.Email,
-                phone = request.Phone
+                OrganizationName = request.OrganizationName,
+                OrganizationEmail = request.Email,
+                OrganizationPhone = request.Phone,
+                OwnerUserId = Guid.NewGuid().ToString("D"),
+                OwnerEmail = request.Email
             };
 
-            var response = await httpClient.PostAsJsonAsync("/api/organizations", createOrgRequest, cancellationToken);
+            var provisioned = await _provisioningClient.ProvisionOrganizationAsync(orgRequest, cancellationToken);
 
-            if (!response.IsSuccessStatusCode)
+            if (provisioned is null)
             {
-                var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
-                _logger.LogError("Failed to create organization: {StatusCode} - {Error}", 
-                    response.StatusCode, errorContent);
-                // COMPENSATING TRANSACTION: Rollback organization if it was created
-                if (createdOrganizationId.HasValue)
-                {
-                    await RollbackOrganizationAsync(createdOrganizationId.Value, cancellationToken);
-                }
-                return Result.Failure<RegisterWithTenantResponse>("Failed to create organization. Please try again.");
+                return Result.Failure<RegisterWithTenantResponse>("Failed to provision organization. Please try again.");
             }
 
-            var apiResponse = await response.Content.ReadFromJsonAsync<ApiResponse<OrganizationDto>>(cancellationToken);
-            
-            if (apiResponse?.Data == null)
-            {
-                // COMPENSATING TRANSACTION: Rollback organization if it was created
-                if (createdOrganizationId.HasValue)
-                {
-                    await RollbackOrganizationAsync(createdOrganizationId.Value, cancellationToken);
-                }
-                return Result.Failure<RegisterWithTenantResponse>("Invalid response from organization service");
-            }
+            createdOrganizationId = provisioned.OrganizationId;
 
-            var organization = apiResponse.Data;
-            createdOrganizationId = organization.OrganizationId; // Track for rollback
-            
-            _logger.LogInformation("Organization created: {Code} - {Name}", organization.Code, organization.Name);
+            _logger.LogInformation("Organization provisioned: {Code} - {Name}", provisioned.Code, provisioned.Name);
 
             // 3. Create User in AuthGate with OrganizationId
             var user = new User
@@ -104,7 +83,7 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
                 EmailConfirmed = true, // Auto-confirm for now
                 FirstName = request.FirstName,
                 LastName = request.LastName,
-                OrganizationId = organization.OrganizationId, // Link to LocaGuest Organization
+                OrganizationId = provisioned.OrganizationId, // Link to LocaGuest Organization
                 IsActive = true,
                 MfaEnabled = false,
                 CreatedAtUtc = DateTime.UtcNow
@@ -143,15 +122,15 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
 
             _logger.LogInformation(
                 "User registered successfully: {UserId} - {Email} - Organization: {OrganizationCode}",
-                user.Id, user.Email, organization.Code);
+                user.Id, user.Email, provisioned.Code);
 
             var responseDto = new RegisterWithTenantResponse
             {
                 UserId = user.Id,
                 Email = user.Email!,
-                OrganizationId = organization.OrganizationId,
-                OrganizationCode = organization.Code,
-                OrganizationName = organization.Name,
+                OrganizationId = provisioned.OrganizationId,
+                OrganizationCode = provisioned.Code,
+                OrganizationName = provisioned.Name,
                 AccessToken = accessToken,
                 RefreshToken = refreshToken,
                 Role = Domain.Constants.Roles.TenantOwner
@@ -182,20 +161,18 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
         try
         {
             _logger.LogWarning("ROLLBACK: Attempting to delete organization {OrganizationId} due to user creation failure", organizationId);
-            
-            var httpClient = _httpClientFactory.CreateClient("LocaGuestApi");
-            var deleteResponse = await httpClient.DeleteAsync($"/api/organizations/{organizationId}", cancellationToken);
-            
-            if (deleteResponse.IsSuccessStatusCode)
+
+            var deleted = await _provisioningClient.HardDeleteOrganizationAsync(organizationId, cancellationToken);
+
+            if (deleted)
             {
                 _logger.LogInformation("ROLLBACK: Successfully deleted organization {OrganizationId}", organizationId);
             }
             else
             {
-                var errorContent = await deleteResponse.Content.ReadAsStringAsync(cancellationToken);
                 _logger.LogError(
-                    "ROLLBACK FAILED: Could not delete organization {OrganizationId}. Status: {StatusCode}, Error: {Error}. MANUAL CLEANUP REQUIRED!",
-                    organizationId, deleteResponse.StatusCode, errorContent);
+                    "ROLLBACK FAILED: Could not delete organization {OrganizationId}. MANUAL CLEANUP REQUIRED!",
+                    organizationId);
             }
         }
         catch (Exception ex)
@@ -204,22 +181,5 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
                 "ROLLBACK EXCEPTION: Failed to delete organization {OrganizationId}. MANUAL CLEANUP REQUIRED!", 
                 organizationId);
         }
-    }
-
-    // DTOs for LocaGuest API communication
-    // ✅ Correspond à Result<T> de LocaGuest
-    private record ApiResponse<T>
-    {
-        public bool IsSuccess { get; init; }
-        public T? Data { get; init; }  // ✅ Changed from Value to Data
-        public string? ErrorMessage { get; init; }  // ✅ Changed from Error to ErrorMessage
-    }
-
-    private record OrganizationDto
-    {
-        public Guid OrganizationId { get; init; }
-        public string Code { get; init; } = string.Empty;
-        public string Name { get; init; } = string.Empty;
-        public string Email { get; init; } = string.Empty;
     }
 }

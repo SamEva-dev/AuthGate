@@ -2,6 +2,7 @@ using AuthGate.Auth.Application.DTOs.Auth;
 using AuthGate.Auth.Application.Features.Auth.Commands.AcceptInvitation;
 using AuthGate.Auth.Application.Features.Auth.Commands.InviteCollaborator;
 using AuthGate.Auth.Application.Features.Auth.Commands.Login;
+using AuthGate.Auth.Application.Features.Auth.Commands.AcceptLocaGuestInvitation;
 using AuthGate.Auth.Application.Features.Auth.Commands.RefreshToken;
 using AuthGate.Auth.Application.Features.Auth.Commands.Register;
 using AuthGate.Auth.Application.Features.Auth.Commands.RegisterWithTenant;
@@ -57,6 +58,56 @@ public class AuthController : ControllerBase
         }
 
         return Ok(result.Value);
+    }
+
+    [HttpPost("invitations/accept")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(AcceptLocaGuestInvitationResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> AcceptLocaGuestInvitation([FromBody] AcceptLocaGuestInvitationCommand command)
+    {
+        var result = await _mediator.Send(command);
+
+        if (result.IsFailure)
+        {
+            return BadRequest(new { error = result.Error });
+        }
+
+        return Ok(result.Value);
+    }
+
+    [HttpPost("prelogin")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(PreLoginResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> PreLogin([FromBody] PreLoginRequestDto dto)
+    {
+        if (dto == null || string.IsNullOrWhiteSpace(dto.Email))
+            return BadRequest(new { error = "Email is required." });
+
+        var user = await _userManager.FindByEmailAsync(dto.Email);
+
+        if (user == null)
+        {
+            return Ok(new PreLoginResponseDto
+            {
+                NextStep = "Register"
+            });
+        }
+
+        if (!user.OrganizationId.HasValue || user.OrganizationId.Value == Guid.Empty)
+        {
+            return Ok(new PreLoginResponseDto
+            {
+                NextStep = "Error",
+                Error = "Account has no organization assigned. Please contact support or use an invitation link."
+            });
+        }
+
+        return Ok(new PreLoginResponseDto
+        {
+            NextStep = "Password"
+        });
     }
 
     /// <summary>

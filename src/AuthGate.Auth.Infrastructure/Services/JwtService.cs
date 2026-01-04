@@ -71,6 +71,38 @@ public class JwtService : IJwtService
         return Convert.ToBase64String(randomNumber);
     }
 
+    public string GenerateMachineToken(string scope)
+    {
+        return GenerateMachineToken(scope, clientId: "authgate", lifetime: TimeSpan.FromMinutes(15), audience: null);
+    }
+
+    public string GenerateMachineToken(string scope, string clientId, TimeSpan? lifetime = null, string? audience = null)
+    {
+        if (string.IsNullOrWhiteSpace(clientId))
+            throw new ArgumentException("clientId is required.", nameof(clientId));
+
+        var claims = new List<Claim>
+        {
+            new(JwtRegisteredClaimNames.Sub, clientId),
+            new("azp", clientId),
+            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            new("scope", scope)
+        };
+
+        var signingKey = _rsaKeyService.GetSigningKey();
+        var credentials = new SigningCredentials(signingKey, SecurityAlgorithms.RsaSha256);
+
+        var token = new JwtSecurityToken(
+            issuer: _configuration["Jwt:Issuer"],
+            audience: audience ?? _configuration["Jwt:Audience"],
+            claims: claims,
+            expires: DateTime.UtcNow.Add(lifetime ?? TimeSpan.FromMinutes(15)),
+            signingCredentials: credentials
+        );
+
+        return _tokenHandler.WriteToken(token);
+    }
+
     public string? GetJwtId(string token)
     {
         try

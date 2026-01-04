@@ -31,4 +31,8 @@ public interface IJwtService
     /// <param name="token">The JWT token</param>
     /// <returns>The JWT ID</returns>
     string? GetJwtId(string token);
+
+    string GenerateMachineToken(string scope);
+
+    string GenerateMachineToken(string scope, string clientId, TimeSpan? lifetime = null, string? audience = null);
 }

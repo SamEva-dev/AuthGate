@@ -81,7 +81,10 @@ public class AuthDbSeeder
             new { Name = Roles.TenantAdmin, Description = "Administrateur désigné par l'Owner - Peut gérer les entités métier et utilisateurs", IsSystemRole = false },
             new { Name = Roles.TenantManager, Description = "Gestionnaire immobilier - Accès opérationnel avancé", IsSystemRole = false },
             new { Name = Roles.TenantUser, Description = "Utilisateur standard du tenant - Assistant, agent, consultant", IsSystemRole = false },
-            new { Name = Roles.ReadOnly, Description = "Accès lecture seule - Comptable externe, auditeur", IsSystemRole = false }
+            new { Name = Roles.ReadOnly, Description = "Accès lecture seule - Comptable externe, auditeur", IsSystemRole = false },
+            new { Name = Roles.OccupantOwner, Description = "Propriétaire (alias) - Rôle additif, destiné à remplacer TenantOwner à terme", IsSystemRole = false },
+            new { Name = Roles.OccupantAdmin, Description = "Administrateur (alias) - Rôle additif, destiné à remplacer TenantAdmin à terme", IsSystemRole = false },
+            new { Name = Roles.Occupant, Description = "Occupant/Locataire - Accès minimal (documents uniquement)", IsSystemRole = false }
         };
 
         foreach (var roleData in roles)

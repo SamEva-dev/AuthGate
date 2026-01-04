@@ -8,12 +8,18 @@ using AuthGate.Auth.Infrastructure.Persistence.Repositories;
 using AuthGate.Auth.Infrastructure.Repositories;
 using AuthGate.Auth.Infrastructure.Services;
 using AuthGate.Auth.Infrastructure.Services.Email;
+using AuthGate.Auth.Application.Common.Clients;
+using AuthGate.Auth.Infrastructure.Options;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.AspNetCore.Identity;
 using Polly;
 using Polly.Extensions.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Http.Resilience;
+using Microsoft.Extensions.Options;
+using AuthGate.Auth.Application.Common.Security;
+using AuthGate.Auth.Infrastructure.Security;
 
 namespace AuthGate.Auth.Infrastructure;
 
@@ -113,7 +119,7 @@ public static class DependencyInjection
         services.AddSingleton<RsaKeyService>();
         
         // Services
-        services.AddScoped<IJwtService, JwtService>();
+        services.AddSingleton<IJwtService, JwtService>();
         services.AddScoped<Application.Common.Interfaces.IPasswordHasher, Services.PasswordHasher>();
         services.AddScoped<ITotpService, TotpService>();
         services.AddScoped<ITwoFactorService, TwoFactorService>();
@@ -136,6 +142,60 @@ public static class DependencyInjection
                 retryCount: 3,
                 sleepDurationProvider: retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)))) // Exponential backoff: 2s, 4s, 8s
         .AddPolicyHandler(Polly.Policy.TimeoutAsync<HttpResponseMessage>(TimeSpan.FromSeconds(10))); // Circuit timeout per request
+
+        services.Configure<LocaGuestOptions>(configuration.GetSection("LocaGuest"));
+        services.Configure<MachineTokenOptions>(configuration.GetSection("LocaGuest:MachineToken"));
+        services.AddSingleton<IMachineTokenProvider, MachineTokenProvider>();
+
+        services
+            .AddHttpClient<ILocaGuestProvisioningClient, LocaGuestProvisioningClient>((sp, client) =>
+            {
+                var opt = sp.GetRequiredService<IOptions<LocaGuestOptions>>().Value;
+                if (!string.IsNullOrWhiteSpace(opt.ApiBaseUrl))
+                    client.BaseAddress = new Uri(opt.ApiBaseUrl.TrimEnd('/') + "/");
+
+                client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+            })
+            .AddStandardResilienceHandler(standard =>
+            {
+                var opt = configuration.GetSection("LocaGuest:Resilience").Get<ResilienceOptions>() ?? new ResilienceOptions();
+
+                standard.AttemptTimeout.Timeout = TimeSpan.FromSeconds(opt.AttemptTimeoutSeconds);
+                standard.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(opt.TotalTimeoutSeconds);
+
+                standard.Retry.MaxRetryAttempts = opt.MaxRetries;
+                standard.Retry.BackoffType = Polly.DelayBackoffType.Exponential;
+                standard.Retry.UseJitter = true;
+
+                standard.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(opt.BreakDurationSeconds);
+                standard.CircuitBreaker.MinimumThroughput = opt.MinimumThroughput;
+                standard.CircuitBreaker.FailureRatio = opt.FailureRatio;
+            });
+
+        services
+            .AddHttpClient<ILocaGuestInvitationProvisioningClient, LocaGuestInvitationProvisioningClient>((sp, client) =>
+            {
+                var opt = sp.GetRequiredService<IOptions<LocaGuestOptions>>().Value;
+                if (!string.IsNullOrWhiteSpace(opt.ApiBaseUrl))
+                    client.BaseAddress = new Uri(opt.ApiBaseUrl.TrimEnd('/') + "/");
+
+                client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+            })
+            .AddStandardResilienceHandler(standard =>
+            {
+                var opt = configuration.GetSection("LocaGuest:Resilience").Get<ResilienceOptions>() ?? new ResilienceOptions();
+
+                standard.AttemptTimeout.Timeout = TimeSpan.FromSeconds(opt.AttemptTimeoutSeconds);
+                standard.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(opt.TotalTimeoutSeconds);
+
+                standard.Retry.MaxRetryAttempts = opt.MaxRetries;
+                standard.Retry.BackoffType = Polly.DelayBackoffType.Exponential;
+                standard.Retry.UseJitter = true;
+
+                standard.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(opt.BreakDurationSeconds);
+                standard.CircuitBreaker.MinimumThroughput = opt.MinimumThroughput;
+                standard.CircuitBreaker.FailureRatio = opt.FailureRatio;
+            });
         
         // HttpContext Accessor
         services.AddHttpContextAccessor();

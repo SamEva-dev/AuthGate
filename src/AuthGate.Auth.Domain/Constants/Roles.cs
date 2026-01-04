@@ -43,6 +43,12 @@ public static class Roles
     /// </summary>
     public const string ReadOnly = "ReadOnly";
 
+    public const string Occupant = "Occupant";
+
+    public const string OccupantAdmin = "OccupantAdmin";
+
+    public const string OccupantOwner = "OccupantOwner";
+
     /// <summary>
     /// All role names
     /// </summary>
@@ -53,7 +59,10 @@ public static class Roles
         TenantAdmin,
         TenantManager,
         TenantUser,
-        ReadOnly
+        ReadOnly,
+        Occupant,
+        OccupantAdmin,
+        OccupantOwner
     };
 
     /// <summary>

@@ -192,6 +192,15 @@ public static class RolePermissionsMatrix
         Permissions.AnalyticsExport
     };
 
+    public static readonly string[] OccupantPermissions =
+    {
+        Permissions.DocumentsRead
+    };
+
+    public static readonly string[] OccupantAdminPermissions = TenantAdminPermissions;
+
+    public static readonly string[] OccupantOwnerPermissions = TenantOwnerPermissions;
+
     /// <summary>
     /// Gets all permissions for a specific role
     /// </summary>
@@ -205,6 +214,9 @@ public static class RolePermissionsMatrix
             Roles.TenantManager => TenantManagerPermissions,
             Roles.TenantUser => TenantUserPermissions,
             Roles.ReadOnly => ReadOnlyPermissions,
+            Roles.Occupant => OccupantPermissions,
+            Roles.OccupantAdmin => OccupantAdminPermissions,
+            Roles.OccupantOwner => OccupantOwnerPermissions,
             _ => Array.Empty<string>()
         };
     }
