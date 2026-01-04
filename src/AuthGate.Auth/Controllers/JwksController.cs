@@ -1,7 +1,7 @@
 using AuthGate.Auth.Infrastructure.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Cryptography;
+using System.Linq;
 
 namespace AuthGate.Auth.Controllers;
 
@@ -28,23 +28,21 @@ public class JwksController : ControllerBase
     [ProducesResponseType(typeof(JwksResponse), StatusCodes.Status200OK)]
     public IActionResult GetJwks()
     {
-        var parameters = _rsaKeyService.GetPublicParameters();
-        var keyId = _rsaKeyService.GetKeyId();
+        var publicKeys = _rsaKeyService.GetAllPublicParameters();
 
-        var jwk = new JsonWebKey
-        {
-            Kty = "RSA",
-            Use = "sig",
-            Kid = keyId,
-            Alg = "RS256",
-            N = Base64UrlEncode(parameters.Modulus!),
-            E = Base64UrlEncode(parameters.Exponent!)
-        };
+        var jwks = publicKeys
+            .Select(k => new JsonWebKey
+            {
+                Kty = "RSA",
+                Use = "sig",
+                Kid = k.Kid,
+                Alg = "RS256",
+                N = Base64UrlEncode(k.PublicParameters.Modulus!),
+                E = Base64UrlEncode(k.PublicParameters.Exponent!)
+            })
+            .ToArray();
 
-        var response = new JwksResponse
-        {
-            Keys = new[] { jwk }
-        };
+        var response = new JwksResponse { Keys = jwks };
 
         return Ok(response);
     }
