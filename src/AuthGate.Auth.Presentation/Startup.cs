@@ -112,7 +112,7 @@ public class Startup
             {
                 c.RoutePrefix = "swagger";
                 foreach (var description in provider.ApiVersionDescriptions)
-                    c.SwaggerEndpoint($"{description.GroupName}/swagger.yaml", $"LocaGuest API {description.GroupName}");
+                    c.SwaggerEndpoint($"/swagger/{description.GroupName}/swagger.json", $"AuthGate API {description.GroupName}");
             });
 
             app.UseHttpsRedirection();
