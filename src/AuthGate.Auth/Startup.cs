@@ -1,4 +1,4 @@
-using AuthGate.Auth;
+ï»¿using AuthGate.Auth;
 using AuthGate.Auth.Infrastructure;
 using AuthGate.Auth.Infrastructure.Services;
 using AuthGate.Auth.Application;
@@ -9,6 +9,10 @@ using Microsoft.OpenApi.Models;
 using Serilog;
 using System.Text;
 using AuthGate.Auth.Infrastructure.Jobs;
+using AuthGate.Auth.Middleware;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 
 namespace AuthGate.Auth;
 
@@ -26,6 +30,30 @@ public class Startup
         // Add Application and Infrastructure layers
         services.AddApplication();
         services.AddInfrastructure(Configuration);
+
+        services.AddOpenTelemetry()
+            .ConfigureResource(resource => resource.AddService(serviceName: "AuthGate.Auth"))
+            .WithTracing(tracing =>
+            {
+                tracing
+                    .AddAspNetCoreInstrumentation()
+                    .AddHttpClientInstrumentation()
+                    .AddEntityFrameworkCoreInstrumentation();
+
+                var otlpEndpoint = Configuration["OpenTelemetry:Otlp:Endpoint"];
+                if (!string.IsNullOrWhiteSpace(otlpEndpoint))
+                {
+                    tracing.AddOtlpExporter(o => o.Endpoint = new Uri(otlpEndpoint));
+                }
+            })
+            .WithMetrics(metrics =>
+            {
+                metrics
+                    .AddAspNetCoreInstrumentation()
+                    .AddHttpClientInstrumentation();
+
+                metrics.AddPrometheusExporter();
+            });
 
         services.AddIdentityService();
 
@@ -172,7 +200,11 @@ public class Startup
             });
         }
 
+        app.UseMiddleware<CorrelationIdMiddleware>();
+
         app.UseSerilogRequestLogging();
+
+        app.UseObservabilityEnrichment();
         
         app.UseRouting();
 
@@ -187,6 +219,8 @@ public class Startup
         app.UseEndpoints(endpoints =>
         {
             endpoints.MapControllers();
+
+            endpoints.MapPrometheusScrapingEndpoint("/metrics").AllowAnonymous();
             
             // Health Check Endpoints (pour Kubernetes/Fly.io)
             endpoints.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
@@ -228,10 +262,10 @@ public class Startup
 
     private void EnsureAuthGateLogDirectories()
     {
-        // 1) Récupère la variable
+        // 1) RÃ©cupÃ¨re la variable
         var home = Environment.GetEnvironmentVariable("AUTHGATE_HOME");
 
-        // 2) Si elle n’existe pas au runtime, on la force (au niveau Process)
+        // 2) Si elle nâ€™existe pas au runtime, on la force (au niveau Process)
         //    Important : mets bien un trailing backslash : E:\ (pas E:)
         if (string.IsNullOrWhiteSpace(home))
         {
@@ -239,7 +273,7 @@ public class Startup
             Environment.SetEnvironmentVariable("AUTHGATE_HOME", home, EnvironmentVariableTarget.Process);
         }
 
-        // 3) Crée les dossiers attendus par tes sinks fichier
+        // 3) CrÃ©e les dossiers attendus par tes sinks fichier
         var authGateDir = Path.Combine(home, "log", "AuthGate");
         var efDir = Path.Combine(authGateDir, "EntityFramework");
 
@@ -247,3 +281,4 @@ public class Startup
         Directory.CreateDirectory(efDir);
     }
 }
+

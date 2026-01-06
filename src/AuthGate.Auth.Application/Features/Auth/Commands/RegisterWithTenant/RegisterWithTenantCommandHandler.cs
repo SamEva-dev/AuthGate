@@ -54,12 +54,14 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
             // 2. Call LocaGuest API to create Organization (Tenant)
             _logger.LogInformation("Creating organization in LocaGuest for {Email}", request.Email);
 
+            var userId = Guid.NewGuid();
+
             var orgRequest = new ProvisionOrganizationRequest
             {
                 OrganizationName = request.OrganizationName,
                 OrganizationEmail = request.Email,
                 OrganizationPhone = request.Phone,
-                OwnerUserId = Guid.NewGuid().ToString("D"),
+                OwnerUserId = userId.ToString("D"),
                 OwnerEmail = request.Email
             };
 
@@ -77,7 +79,7 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
             // 3. Create User in AuthGate with OrganizationId
             var user = new User
             {
-                Id = Guid.NewGuid(),
+                Id = userId,
                 UserName = request.Email,
                 Email = request.Email,
                 EmailConfirmed = true, // Auto-confirm for now
@@ -103,7 +105,7 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
             }
 
             // 4. Assign TenantOwner role
-            var roleResult = await _userManager.AddToRoleAsync(user, Domain.Constants.Roles.TenantOwner);
+            var roleResult = await _userManager.AddToRoleAsync(user, Domain.Constants.Roles.TenantAdmin);
             
             if (!roleResult.Succeeded)
             {
@@ -133,7 +135,7 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
                 OrganizationName = provisioned.Name,
                 AccessToken = accessToken,
                 RefreshToken = refreshToken,
-                Role = Domain.Constants.Roles.TenantOwner
+                Role = Domain.Constants.Roles.TenantAdmin
             };
 
             return Result<RegisterWithTenantResponse>.Success(responseDto);

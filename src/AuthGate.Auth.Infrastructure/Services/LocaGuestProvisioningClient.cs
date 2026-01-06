@@ -5,6 +5,7 @@ using System.Text.Json;
 using AuthGate.Auth.Application.Common.Clients;
 using AuthGate.Auth.Application.Common.Clients.Models;
 using AuthGate.Auth.Application.Common.Security;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 
 namespace AuthGate.Auth.Infrastructure.Services;
@@ -14,15 +15,18 @@ public sealed class LocaGuestProvisioningClient : ILocaGuestProvisioningClient
     private readonly HttpClient _http;
     private readonly IMachineTokenProvider _machineTokenProvider;
     private readonly ILogger<LocaGuestProvisioningClient> _logger;
+    private readonly IHttpContextAccessor _httpContextAccessor;
 
     public LocaGuestProvisioningClient(
         HttpClient http,
         IMachineTokenProvider machineTokenProvider,
-        ILogger<LocaGuestProvisioningClient> logger)
+        ILogger<LocaGuestProvisioningClient> logger,
+        IHttpContextAccessor httpContextAccessor)
     {
         _http = http;
         _machineTokenProvider = machineTokenProvider;
         _logger = logger;
+        _httpContextAccessor = httpContextAccessor;
     }
 
     public async Task<ProvisionOrganizationResponse?> ProvisionOrganizationAsync(
@@ -97,11 +101,21 @@ public sealed class LocaGuestProvisioningClient : ILocaGuestProvisioningClient
         CancellationToken ct)
     {
         using var msg = new HttpRequestMessage(HttpMethod.Post, path);
+        PropagateCorrelationId(msg);
         msg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
         msg.Headers.Add("Idempotency-Key", idempotencyKey);
         msg.Content = JsonContent.Create(request);
 
         return await _http.SendAsync(msg, ct);
+    }
+
+    private void PropagateCorrelationId(HttpRequestMessage msg)
+    {
+        var correlationId = _httpContextAccessor.HttpContext?.Request.Headers["X-Correlation-Id"].FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(correlationId) && !msg.Headers.Contains("X-Correlation-Id"))
+        {
+            msg.Headers.TryAddWithoutValidation("X-Correlation-Id", correlationId);
+        }
     }
 
     private async Task<HttpResponseMessage> SendDeleteAsync(
@@ -110,6 +124,7 @@ public sealed class LocaGuestProvisioningClient : ILocaGuestProvisioningClient
         CancellationToken ct)
     {
         using var msg = new HttpRequestMessage(HttpMethod.Delete, path);
+        PropagateCorrelationId(msg);
         msg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
 
         return await _http.SendAsync(msg, ct);
@@ -123,6 +138,7 @@ public sealed class LocaGuestProvisioningClient : ILocaGuestProvisioningClient
         CancellationToken ct)
     {
         using var msg = new HttpRequestMessage(HttpMethod.Post, path);
+        PropagateCorrelationId(msg);
         msg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
         msg.Headers.Add("Idempotency-Key", idempotencyKey);
 

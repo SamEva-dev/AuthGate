@@ -1,5 +1,6 @@
 using Serilog;
 using Serilog.Events;
+using Serilog.Formatting.Compact;
 using AuthGate.Auth;
 using AuthGate.Auth.Application;
 using AuthGate.Auth.Infrastructure;
@@ -11,7 +12,7 @@ Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
     .MinimumLevel.Override("Microsoft.EntityFrameworkCore", LogEventLevel.Warning)
     .Enrich.FromLogContext()
-    .WriteTo.Console()
+    .WriteTo.Console(new RenderedCompactJsonFormatter())
     .CreateLogger();
 
 try
