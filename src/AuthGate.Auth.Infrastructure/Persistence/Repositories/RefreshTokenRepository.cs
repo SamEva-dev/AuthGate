@@ -1,22 +1,46 @@
 using AuthGate.Auth.Domain.Entities;
 using AuthGate.Auth.Domain.Repositories;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace AuthGate.Auth.Infrastructure.Persistence.Repositories;
 
 public class RefreshTokenRepository : IRefreshTokenRepository
 {
     private readonly AuthDbContext _context;
+    private readonly IConfiguration _configuration;
 
-    public RefreshTokenRepository(AuthDbContext context)
+    public RefreshTokenRepository(AuthDbContext context, IConfiguration configuration)
     {
         _context = context;
+        _configuration = configuration;
     }
 
     public async Task<RefreshToken?> GetByTokenAsync(string token, CancellationToken cancellationToken = default)
     {
+        var tokenHash = HashRefreshTokenOrNull(token);
         return await _context.RefreshTokens
-            .FirstOrDefaultAsync(rt => rt.Token == token, cancellationToken);
+            .FirstOrDefaultAsync(rt => rt.Token == token || (tokenHash != null && rt.Token == tokenHash), cancellationToken);
+    }
+
+    private string? HashRefreshTokenOrNull(string refreshToken)
+    {
+        var pepper = _configuration["Jwt:RefreshTokenPepper"];
+        if (string.IsNullOrWhiteSpace(pepper))
+        {
+            pepper = _configuration["Security:RefreshTokenPepper"];
+        }
+
+        if (string.IsNullOrWhiteSpace(pepper))
+        {
+            return null;
+        }
+
+        var input = Encoding.UTF8.GetBytes(refreshToken + pepper);
+        var hash = SHA256.HashData(input);
+        return Convert.ToHexString(hash);
     }
 
     public async Task<IEnumerable<RefreshToken>> GetByUserIdAsync(Guid userId, CancellationToken cancellationToken = default)

@@ -18,12 +18,14 @@ namespace AuthGate.Auth;
 
 public class Startup
 {
-    public Startup(IConfiguration configuration)
+    public Startup(IConfiguration configuration, IWebHostEnvironment env)
     {
         Configuration = configuration;
+        Env = env;
     }
 
     public IConfiguration Configuration { get; }
+    public IWebHostEnvironment Env { get; }
 
     public void ConfigureServices(IServiceCollection services)
     {
@@ -98,7 +100,9 @@ public class Startup
         })
         .AddJwtBearer(options =>
         {
-            options.RequireHttpsMetadata = false; // Set to true in production
+            var aspnetEnv = Configuration["ASPNETCORE_ENVIRONMENT"];
+            var isDev = string.Equals(aspnetEnv, Environments.Development, StringComparison.OrdinalIgnoreCase);
+            options.RequireHttpsMetadata = !isDev;
             options.SaveToken = true;
             
             // Configure token validation with RSA key resolver
@@ -111,7 +115,19 @@ public class Startup
                     context.Options.TokenValidationParameters = new TokenValidationParameters
                     {
                         ValidateIssuerSigningKey = true,
-                        IssuerSigningKey = rsaKeyService.GetSigningKey(),
+                        IssuerSigningKeyResolver = (_, _, kid, _) =>
+                        {
+                            // Allow validation against all non-pruned public keys to support key rotation
+                            var keys = rsaKeyService.GetAllPublicParameters();
+                            if (!string.IsNullOrWhiteSpace(kid))
+                            {
+                                keys = keys.Where(k => string.Equals(k.Kid, kid, StringComparison.Ordinal)).ToList();
+                            }
+
+                            return keys
+                                .Select(k => (SecurityKey)new RsaSecurityKey(k.PublicParameters) { KeyId = k.Kid })
+                                .ToList();
+                        },
                         ValidateIssuer = true,
                         ValidIssuer = Configuration["Jwt:Issuer"],
                         ValidateAudience = true,
@@ -200,6 +216,28 @@ public class Startup
             });
         }
 
+        var forceHttpsConfigured = Configuration.GetValue<bool?>("Security:ForceHttps");
+        var forceHttps = forceHttpsConfigured ?? env.IsProduction();
+        if (forceHttps)
+        {
+            app.UseHsts();
+            app.UseHttpsRedirection();
+        }
+
+        app.Use(async (context, next) =>
+        {
+            context.Response.OnStarting(() =>
+            {
+                context.Response.Headers.TryAdd("X-Content-Type-Options", "nosniff");
+                context.Response.Headers.TryAdd("Referrer-Policy", "strict-origin-when-cross-origin");
+                context.Response.Headers.TryAdd("X-Frame-Options", "DENY");
+                context.Response.Headers.TryAdd("Content-Security-Policy", "frame-ancestors 'none';");
+                return Task.CompletedTask;
+            });
+
+            await next();
+        });
+
         app.UseMiddleware<CorrelationIdMiddleware>();
 
         app.UseSerilogRequestLogging();
@@ -244,19 +282,19 @@ public class Startup
                     });
                     await context.Response.WriteAsync(result);
                 }
-            });
+            }).AllowAnonymous();
 
             // Readiness probe
             endpoints.MapHealthChecks("/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
             {
                 Predicate = check => check.Tags.Contains("ready")
-            });
+            }).AllowAnonymous();
 
             // Liveness probe
             endpoints.MapHealthChecks("/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
             {
                 Predicate = check => check.Tags.Contains("live")
-            });
+            }).AllowAnonymous();
         });
     }
 

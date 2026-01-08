@@ -13,39 +13,59 @@ public static class RateLimitingServiceExtensions
         services.AddRateLimiter(options =>
         {
             // Policy for authentication endpoints (stricter)
-            options.AddFixedWindowLimiter("auth", config =>
+            options.AddPolicy("auth", context =>
             {
-                config.PermitLimit = 5; // 5 requests
-                config.Window = TimeSpan.FromMinutes(1); // per minute
-                config.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-                config.QueueLimit = 2;
+                var ipAddress = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+                return RateLimitPartition.GetFixedWindowLimiter(ipAddress, _ =>
+                    new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 5,
+                        Window = TimeSpan.FromMinutes(1),
+                        QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                        QueueLimit = 2
+                    });
             });
 
             // Policy for password reset (very strict)
-            options.AddFixedWindowLimiter("password-reset", config =>
+            options.AddPolicy("password-reset", context =>
             {
-                config.PermitLimit = 3; // 3 requests
-                config.Window = TimeSpan.FromMinutes(15); // per 15 minutes
-                config.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-                config.QueueLimit = 0;
+                var ipAddress = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+                return RateLimitPartition.GetFixedWindowLimiter(ipAddress, _ =>
+                    new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 3,
+                        Window = TimeSpan.FromMinutes(15),
+                        QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                        QueueLimit = 0
+                    });
             });
 
             // Policy for registration (strict)
-            options.AddFixedWindowLimiter("register", config =>
+            options.AddPolicy("register", context =>
             {
-                config.PermitLimit = 3; // 3 requests
-                config.Window = TimeSpan.FromHours(1); // per hour
-                config.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-                config.QueueLimit = 0;
+                var ipAddress = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+                return RateLimitPartition.GetFixedWindowLimiter(ipAddress, _ =>
+                    new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 3,
+                        Window = TimeSpan.FromHours(1),
+                        QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                        QueueLimit = 0
+                    });
             });
 
             // General API policy (more permissive)
-            options.AddFixedWindowLimiter("api", config =>
+            options.AddPolicy("api", context =>
             {
-                config.PermitLimit = 100; // 100 requests
-                config.Window = TimeSpan.FromMinutes(1); // per minute
-                config.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-                config.QueueLimit = 5;
+                var ipAddress = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+                return RateLimitPartition.GetFixedWindowLimiter(ipAddress, _ =>
+                    new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 100,
+                        Window = TimeSpan.FromMinutes(1),
+                        QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                        QueueLimit = 5
+                    });
             });
 
             // Global fallback policy

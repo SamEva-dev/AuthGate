@@ -105,8 +105,8 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
             }
 
             // 4. Assign TenantOwner role
-            var roleResult = await _userManager.AddToRoleAsync(user, Domain.Constants.Roles.TenantAdmin);
-            
+            var roleResult = await _userManager.AddToRoleAsync(user, Domain.Constants.Roles.SuperAdmin);
+
             if (!roleResult.Succeeded)
             {
                 var roleErrors = string.Join(", ", roleResult.Errors.Select(e => e.Description));
@@ -135,7 +135,7 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
                 OrganizationName = provisioned.Name,
                 AccessToken = accessToken,
                 RefreshToken = refreshToken,
-                Role = Domain.Constants.Roles.TenantAdmin
+                Role = Domain.Constants.Roles.SuperAdmin
             };
 
             return Result<RegisterWithTenantResponse>.Success(responseDto);

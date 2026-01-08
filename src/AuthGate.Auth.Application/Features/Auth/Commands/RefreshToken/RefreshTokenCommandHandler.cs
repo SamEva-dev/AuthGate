@@ -5,6 +5,9 @@ using AuthGate.Auth.Domain.Entities;
 using AuthGate.Auth.Domain.Repositories;
 using MediatR;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Configuration;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace AuthGate.Auth.Application.Features.Auth.Commands.RefreshToken;
 
@@ -17,17 +20,20 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, R
     private readonly IJwtService _jwtService;
     private readonly IUserRoleService _userRoleService;
     private readonly ILogger<RefreshTokenCommandHandler> _logger;
+    private readonly IConfiguration _configuration;
 
     public RefreshTokenCommandHandler(
         IUnitOfWork unitOfWork,
         IJwtService jwtService,
         IUserRoleService userRoleService,
-        ILogger<RefreshTokenCommandHandler> logger)
+        ILogger<RefreshTokenCommandHandler> logger,
+        IConfiguration configuration)
     {
         _unitOfWork = unitOfWork;
         _jwtService = jwtService;
         _userRoleService = userRoleService;
         _logger = logger;
+        _configuration = configuration;
     }
 
     public async Task<Result<TokenResponseDto>> Handle(RefreshTokenCommand request, CancellationToken cancellationToken)
@@ -102,6 +108,8 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, R
         var newRefreshToken = _jwtService.GenerateRefreshToken();
         var jwtId = _jwtService.GetJwtId(newAccessToken) ?? Guid.NewGuid().ToString();
 
+        var newRefreshTokenHash = HashRefreshToken(newRefreshToken);
+
         // Mark old token as used
         refreshToken.IsUsed = true;
         _unitOfWork.RefreshTokens.Update(refreshToken);
@@ -111,7 +119,7 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, R
         {
             Id = Guid.NewGuid(),
             UserId = user.Id,
-            Token = newRefreshToken,
+            Token = newRefreshTokenHash,
             JwtId = jwtId,
             ExpiresAtUtc = DateTime.UtcNow.AddDays(7),
             CreatedAtUtc = DateTime.UtcNow
@@ -131,5 +139,23 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, R
             RefreshToken = newRefreshToken,
             ExpiresIn = 900 // 15 minutes
         });
+    }
+
+    private string HashRefreshToken(string refreshToken)
+    {
+        var pepper = _configuration["Jwt:RefreshTokenPepper"];
+        if (string.IsNullOrWhiteSpace(pepper))
+        {
+            pepper = _configuration["Security:RefreshTokenPepper"];
+        }
+
+        if (string.IsNullOrWhiteSpace(pepper))
+        {
+            return refreshToken;
+        }
+
+        var input = Encoding.UTF8.GetBytes(refreshToken + pepper);
+        var hash = SHA256.HashData(input);
+        return Convert.ToHexString(hash);
     }
 }

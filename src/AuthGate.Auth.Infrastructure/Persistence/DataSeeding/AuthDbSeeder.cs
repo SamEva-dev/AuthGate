@@ -41,7 +41,7 @@ public class AuthDbSeeder
             await SeedRolePermissionsAsync();
 
             // Seed Admin User
-            await SeedAdminUserAsync();
+           // await SeedAdminUserAsync();
 
             // Seed Demo User
             await SeedDemoUserAsync();
@@ -157,9 +157,26 @@ public class AuthDbSeeder
             
             // Documents Management
             new { Code = Permissions.DocumentsRead, DisplayName = "Read Documents", Description = "Can view documents" },
+            new { Code = Permissions.DocumentsWrite, DisplayName = "Write Documents", Description = "Can create and update documents" },
             new { Code = Permissions.DocumentsUpload, DisplayName = "Upload Documents", Description = "Can upload new documents" },
             new { Code = Permissions.DocumentsGenerate, DisplayName = "Generate Documents", Description = "Can generate documents from templates" },
             new { Code = Permissions.DocumentsDelete, DisplayName = "Delete Documents", Description = "Can delete documents" },
+
+            // Rooms Management (LocaGuest)
+            new { Code = Permissions.RoomsRead, DisplayName = "Read Rooms", Description = "Can view rooms" },
+            new { Code = Permissions.RoomsWrite, DisplayName = "Write Rooms", Description = "Can create and update rooms" },
+
+            // Payments Management (LocaGuest)
+            new { Code = Permissions.PaymentsRead, DisplayName = "Read Payments", Description = "Can view payments" },
+            new { Code = Permissions.PaymentsWrite, DisplayName = "Write Payments", Description = "Can create and update payments" },
+
+            // Deposits Management (LocaGuest)
+            new { Code = Permissions.DepositsRead, DisplayName = "Read Deposits", Description = "Can view deposits (cautions)" },
+            new { Code = Permissions.DepositsWrite, DisplayName = "Write Deposits", Description = "Can create and update deposits (cautions)" },
+
+            // Team Management (LocaGuest)
+            new { Code = Permissions.TeamRead, DisplayName = "Read Team", Description = "Can view team members" },
+            new { Code = Permissions.TeamManage, DisplayName = "Manage Team", Description = "Can manage team members" },
             
             // Analytics & Reporting
             new { Code = Permissions.AnalyticsRead, DisplayName = "Read Analytics", Description = "Can view analytics and reports" },

@@ -68,7 +68,7 @@ try
             .ReadFrom.Services(services));
 
     // Use Startup class for service configuration
-    var startup = new Startup(builder.Configuration);
+    var startup = new Startup(builder.Configuration, builder.Environment);
     startup.ConfigureServices(builder.Services);
 
     var app = builder.Build();

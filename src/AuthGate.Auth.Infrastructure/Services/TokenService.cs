@@ -4,6 +4,9 @@ using AuthGate.Auth.Domain.Entities;
 using AuthGate.Auth.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace AuthGate.Auth.Infrastructure.Services;
 
@@ -16,17 +19,20 @@ public class TokenService : ITokenService
     private readonly AuthDbContext _context;
     private readonly IJwtService _jwtService;
     private readonly IUserRoleService _userRoleService;
+    private readonly IConfiguration _configuration;
 
     public TokenService(
         UserManager<User> userManager,
         AuthDbContext context,
         IJwtService jwtService,
-        IUserRoleService userRoleService)
+        IUserRoleService userRoleService,
+        IConfiguration configuration)
     {
         _userManager = userManager;
         _context = context;
         _jwtService = jwtService;
         _userRoleService = userRoleService;
+        _configuration = configuration;
     }
 
     public async Task<(string AccessToken, string RefreshToken)> GenerateTokensAsync(User user)
@@ -53,12 +59,14 @@ public class TokenService : ITokenService
         var refreshToken = _jwtService.GenerateRefreshToken();
         var jwtId = _jwtService.GetJwtId(accessToken) ?? Guid.NewGuid().ToString();
 
+        var refreshTokenHash = HashRefreshToken(refreshToken);
+
         // Store refresh token
         var refreshTokenEntity = new RefreshToken
         {
             Id = Guid.NewGuid(),
             UserId = user.Id,
-            Token = refreshToken,
+            Token = refreshTokenHash,
             JwtId = jwtId,
             IsUsed = false,
             IsRevoked = false,
@@ -74,8 +82,9 @@ public class TokenService : ITokenService
 
     public async Task<(string AccessToken, string RefreshToken)?> RefreshTokenAsync(string refreshToken)
     {
+        var refreshTokenHash = HashRefreshToken(refreshToken);
         var storedToken = await _context.RefreshTokens
-            .FirstOrDefaultAsync(rt => rt.Token == refreshToken);
+            .FirstOrDefaultAsync(rt => rt.Token == refreshToken || rt.Token == refreshTokenHash);
 
         if (storedToken == null || storedToken.IsRevoked || storedToken.IsUsed || storedToken.ExpiresAtUtc < DateTime.UtcNow)
         {
@@ -99,8 +108,9 @@ public class TokenService : ITokenService
 
     public async Task<bool> RevokeTokenAsync(string refreshToken)
     {
+        var refreshTokenHash = HashRefreshToken(refreshToken);
         var storedToken = await _context.RefreshTokens
-            .FirstOrDefaultAsync(rt => rt.Token == refreshToken);
+            .FirstOrDefaultAsync(rt => rt.Token == refreshToken || rt.Token == refreshTokenHash);
 
         if (storedToken == null)
         {
@@ -111,5 +121,23 @@ public class TokenService : ITokenService
         await _context.SaveChangesAsync();
 
         return true;
+    }
+
+    private string HashRefreshToken(string refreshToken)
+    {
+        var pepper = _configuration["Jwt:RefreshTokenPepper"];
+        if (string.IsNullOrWhiteSpace(pepper))
+        {
+            pepper = _configuration["Security:RefreshTokenPepper"];
+        }
+
+        if (string.IsNullOrWhiteSpace(pepper))
+        {
+            return refreshToken;
+        }
+
+        var input = Encoding.UTF8.GetBytes(refreshToken + pepper);
+        var hash = SHA256.HashData(input);
+        return Convert.ToHexString(hash);
     }
 }

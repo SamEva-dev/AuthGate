@@ -152,6 +152,8 @@ public static class Permissions
     /// </summary>
     public const string DocumentsRead = "documents.read";
 
+    public const string DocumentsWrite = "documents.write";
+
     /// <summary>
     /// Can upload new documents
     /// </summary>
@@ -166,6 +168,38 @@ public static class Permissions
     /// Can delete documents
     /// </summary>
     public const string DocumentsDelete = "documents.delete";
+
+    // ========================================
+    // ROOMS MANAGEMENT (LocaGuest)
+    // ========================================
+
+    public const string RoomsRead = "rooms.read";
+
+    public const string RoomsWrite = "rooms.write";
+
+    // ========================================
+    // PAYMENTS MANAGEMENT (LocaGuest)
+    // ========================================
+
+    public const string PaymentsRead = "payments.read";
+
+    public const string PaymentsWrite = "payments.write";
+
+    // ========================================
+    // DEPOSITS MANAGEMENT (LocaGuest)
+    // ========================================
+
+    public const string DepositsRead = "deposits.read";
+
+    public const string DepositsWrite = "deposits.write";
+
+    // ========================================
+    // TEAM MANAGEMENT (LocaGuest)
+    // ========================================
+
+    public const string TeamRead = "team.read";
+
+    public const string TeamManage = "team.manage";
 
     // ========================================
     // ANALYTICS & REPORTING
@@ -242,9 +276,26 @@ public static class Permissions
 
         // Documents
         DocumentsRead,
+        DocumentsWrite,
         DocumentsUpload,
         DocumentsGenerate,
         DocumentsDelete,
+
+        // Rooms
+        RoomsRead,
+        RoomsWrite,
+
+        // Payments
+        PaymentsRead,
+        PaymentsWrite,
+
+        // Deposits
+        DepositsRead,
+        DepositsWrite,
+
+        // Team
+        TeamRead,
+        TeamManage,
 
         // Analytics
         AnalyticsRead,

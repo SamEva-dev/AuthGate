@@ -57,9 +57,26 @@ public static class RolePermissionsMatrix
 
         // Documents
         Permissions.DocumentsRead,
+        Permissions.DocumentsWrite,
         Permissions.DocumentsUpload,
         Permissions.DocumentsGenerate,
         Permissions.DocumentsDelete,
+
+        // Rooms
+        Permissions.RoomsRead,
+        Permissions.RoomsWrite,
+
+        // Payments
+        Permissions.PaymentsRead,
+        Permissions.PaymentsWrite,
+
+        // Deposits
+        Permissions.DepositsRead,
+        Permissions.DepositsWrite,
+
+        // Team
+        Permissions.TeamRead,
+        Permissions.TeamManage,
 
         // Analytics
         Permissions.AnalyticsRead,
@@ -105,9 +122,26 @@ public static class RolePermissionsMatrix
 
         // Documents
         Permissions.DocumentsRead,
+        Permissions.DocumentsWrite,
         Permissions.DocumentsUpload,
         Permissions.DocumentsGenerate,
         Permissions.DocumentsDelete,
+
+        // Rooms
+        Permissions.RoomsRead,
+        Permissions.RoomsWrite,
+
+        // Payments
+        Permissions.PaymentsRead,
+        Permissions.PaymentsWrite,
+
+        // Deposits
+        Permissions.DepositsRead,
+        Permissions.DepositsWrite,
+
+        // Team
+        Permissions.TeamRead,
+        Permissions.TeamManage,
 
         // Analytics
         Permissions.AnalyticsRead,
@@ -141,6 +175,21 @@ public static class RolePermissionsMatrix
         Permissions.DocumentsUpload,
         Permissions.DocumentsGenerate,
 
+        // Rooms
+        Permissions.RoomsRead,
+        Permissions.RoomsWrite,
+
+        // Payments
+        Permissions.PaymentsRead,
+        Permissions.PaymentsWrite,
+
+        // Deposits
+        Permissions.DepositsRead,
+        Permissions.DepositsWrite,
+
+        // Team
+        Permissions.TeamRead,
+
         // Analytics
         Permissions.AnalyticsRead
     };
@@ -165,6 +214,18 @@ public static class RolePermissionsMatrix
         Permissions.DocumentsRead,
         Permissions.DocumentsUpload,
 
+        // Rooms
+        Permissions.RoomsRead,
+
+        // Payments
+        Permissions.PaymentsRead,
+
+        // Deposits
+        Permissions.DepositsRead,
+
+        // Team
+        Permissions.TeamRead,
+
         // Analytics (read only)
         Permissions.AnalyticsRead
     };
@@ -186,6 +247,18 @@ public static class RolePermissionsMatrix
 
         // Documents
         Permissions.DocumentsRead,
+
+        // Rooms
+        Permissions.RoomsRead,
+
+        // Payments
+        Permissions.PaymentsRead,
+
+        // Deposits
+        Permissions.DepositsRead,
+
+        // Team
+        Permissions.TeamRead,
 
         // Analytics
         Permissions.AnalyticsRead,
