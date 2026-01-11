@@ -1,0 +1,56 @@
+name: Build & Deploy
+
+on:
+  push:
+    branches: [ "main", "preprod", "staging" ]
+
+jobs:
+  build-push-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set tag
+        id: tag
+        run: |
+          if [ "${GITHUB_REF_NAME}" = "main" ]; then echo "tag=prod" >> $GITHUB_OUTPUT; fi
+          if [ "${GITHUB_REF_NAME}" = "preprod" ]; then echo "tag=preprod" >> $GITHUB_OUTPUT; fi
+          if [ "${GITHUB_REF_NAME}" = "staging" ]; then echo "tag=staging" >> $GITHUB_OUTPUT; fi
+
+      - name: Login Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build & Push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/authgate:${{ steps.tag.outputs.tag }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/authgate:sha-${{ github.sha }}
+
+      - name: Deploy (SSH)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
+            cd /opt/locaguest/compose
+            docker login -u ${{ secrets.DOCKERHUB_USERNAME }} -p ${{ secrets.DOCKERHUB_TOKEN }}
+            if [ "${{ steps.tag.outputs.tag }}" = "prod" ]; then
+              docker compose pull authgate-prod
+              docker compose up -d --no-deps authgate-prod
+            fi
+            if [ "${{ steps.tag.outputs.tag }}" = "preprod" ]; then
+              docker compose --profile preprod pull authgate-preprod
+              docker compose --profile preprod up -d --no-deps authgate-preprod
+            fi
+            if [ "${{ steps.tag.outputs.tag }}" = "staging" ]; then
+              docker compose --profile staging pull authgate-staging
+              docker compose --profile staging up -d --no-deps authgate-staging
+            fi

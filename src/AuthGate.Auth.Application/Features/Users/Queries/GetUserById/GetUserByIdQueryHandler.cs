@@ -1,6 +1,8 @@
 using AuthGate.Auth.Application.Common;
 using AuthGate.Auth.Application.Common.Interfaces;
 using AuthGate.Auth.Application.DTOs.Users;
+using AuthGate.Auth.Application.Services;
+using DomainRoles = AuthGate.Auth.Domain.Constants.Roles;
 using AuthGate.Auth.Domain.Entities;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
@@ -15,15 +17,21 @@ public class GetUserByIdQueryHandler : IRequestHandler<GetUserByIdQuery, Result<
 {
     private readonly UserManager<User> _userManager;
     private readonly IUserRoleService _userRoleService;
+    private readonly ICurrentUserService _currentUserService;
+    private readonly IOrganizationContext _organizationContext;
     private readonly ILogger<GetUserByIdQueryHandler> _logger;
 
     public GetUserByIdQueryHandler(
         UserManager<User> userManager,
         IUserRoleService userRoleService,
+        ICurrentUserService currentUserService,
+        IOrganizationContext organizationContext,
         ILogger<GetUserByIdQueryHandler> logger)
     {
         _userManager = userManager;
         _userRoleService = userRoleService;
+        _currentUserService = currentUserService;
+        _organizationContext = organizationContext;
         _logger = logger;
     }
 
@@ -35,6 +43,22 @@ public class GetUserByIdQueryHandler : IRequestHandler<GetUserByIdQuery, Result<
         {
             _logger.LogWarning("User not found: {UserId}", request.UserId);
             return Result.Failure<UserDetailDto>("User not found");
+        }
+
+        var isSuperAdmin = _currentUserService.Roles.Contains(DomainRoles.SuperAdmin);
+        if (!isSuperAdmin)
+        {
+            if (!_organizationContext.OrganizationId.HasValue)
+            {
+                return Result.Failure<UserDetailDto>("Tenant context not found");
+            }
+
+            var orgId = _organizationContext.OrganizationId.Value;
+            if (user.OrganizationId != orgId)
+            {
+                _logger.LogWarning("Cross-tenant user access blocked. TargetUserId={TargetUserId}", request.UserId);
+                return Result.Failure<UserDetailDto>("User not found");
+            }
         }
 
         var roles = await _userRoleService.GetUserRolesAsync(user);

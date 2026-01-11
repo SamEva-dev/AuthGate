@@ -1,8 +1,10 @@
-using AuthGate.Auth.Application.Common;
 using AuthGate.Auth.Application.Common.Interfaces;
 using AuthGate.Auth.Application.DTOs.Auth;
+using AuthGate.Auth.Application.Services;
+using AuthGate.Auth.Domain.Constants;
 using AuthGate.Auth.Domain.Entities;
-using AuthGate.Auth.Domain.Repositories;
+using AuthGate.Auth.Domain.Interfaces;
+using AuthGate.Auth.Domain.ValueObjects;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging;
@@ -105,6 +107,16 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<LoginRes
                         // Skip 2FA! Generate tokens directly
                         var trustedRoles = await _userRoleService.GetUserRolesAsync(user);
                         var trustedPermissions = await _userRoleService.GetUserPermissionsAsync(user);
+
+                        // Restrict access to Access-Manager-Pro to specific roles only
+                        // Allowed: SuperAdmin, TenantOwner
+                        if (!trustedRoles.Any(r => string.Equals(r, Roles.SuperAdmin, StringComparison.OrdinalIgnoreCase)
+                                               || string.Equals(r, Roles.TenantOwner, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            _logger.LogWarning("Login denied for {UserId} ({Email}): role not allowed", user.Id, user.Email);
+                            return Result.Failure<LoginResponseDto>("Access denied");
+                        }
+
                         if (!user.OrganizationId.HasValue || user.OrganizationId.Value == Guid.Empty)
                         {
                             return Result.Failure<LoginResponseDto>("Cannot issue access token without OrganizationId.");
@@ -171,6 +183,15 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<LoginRes
             var roles = await _userRoleService.GetUserRolesAsync(user);
             var permissions = await _userRoleService.GetUserPermissionsAsync(user);
             _logger.LogDebug("Found {RoleCount} roles and {PermissionCount} permissions", roles.Count(), permissions.Count());
+
+            // Restrict access to Access-Manager-Pro to specific roles only
+            // Allowed: SuperAdmin, TenantOwner
+            if (!roles.Any(r => string.Equals(r, Roles.SuperAdmin, StringComparison.OrdinalIgnoreCase)
+                             || string.Equals(r, Roles.TenantOwner, StringComparison.OrdinalIgnoreCase)))
+            {
+                _logger.LogWarning("Login denied for {UserId} ({Email}): role not allowed", user.Id, user.Email);
+                return Result.Failure<LoginResponseDto>("Access denied");
+            }
 
             // Generate tokens (MFA is false here since we passed the check above)
             _logger.LogDebug("Generating access token");

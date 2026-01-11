@@ -4,6 +4,7 @@ using Serilog.Formatting.Compact;
 using AuthGate.Auth;
 using AuthGate.Auth.Application;
 using AuthGate.Auth.Infrastructure;
+using Npgsql;
 
 // Configure Serilog
 Log.Logger = new LoggerConfiguration()
@@ -20,6 +21,24 @@ try
     Log.Information("*** STARTUP ***");
 
     var builder = WebApplication.CreateBuilder(args);
+
+    if (builder.Environment.IsDevelopment())
+    {
+        try
+        {
+            var defaultCs = builder.Configuration.GetConnectionString("DefaultConnection_Auth");
+            var auditCs = builder.Configuration.GetConnectionString("AuditConnection_Auth");
+
+            var defaultHasPwd = !string.IsNullOrWhiteSpace(defaultCs) && !string.IsNullOrWhiteSpace(new NpgsqlConnectionStringBuilder(defaultCs).Password);
+            var auditHasPwd = !string.IsNullOrWhiteSpace(auditCs) && !string.IsNullOrWhiteSpace(new NpgsqlConnectionStringBuilder(auditCs).Password);
+
+            Log.Information("Startup DB config (Development): DefaultConnection_Auth has password={DefaultHasPwd}, AuditConnection_Auth has password={AuditHasPwd}", defaultHasPwd, auditHasPwd);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Startup DB config (Development): unable to parse connection strings");
+        }
+    }
 
     static string ResolveHomeDirectory(string envVarName, string appFolderName)
     {
@@ -74,7 +93,10 @@ try
     var app = builder.Build();
 
     // Apply migrations
-    AuthGate.Auth.MigrationManager.ApplyMigrations(app);
+    if (!app.Environment.IsEnvironment("Testing"))
+    {
+        AuthGate.Auth.MigrationManager.ApplyMigrations(app);
+    }
 
     // Use Startup class for middleware configuration
     startup.Configure(app, app.Environment);

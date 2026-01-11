@@ -2,6 +2,8 @@ using AuthGate.Auth.Application.Common;
 using AuthGate.Auth.Application.Common.Interfaces;
 using AuthGate.Auth.Application.Common.Models;
 using AuthGate.Auth.Application.DTOs.Users;
+using AuthGate.Auth.Application.Services;
+using DomainRoles = AuthGate.Auth.Domain.Constants.Roles;
 using AuthGate.Auth.Domain.Entities;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
@@ -17,21 +19,39 @@ public class GetUsersQueryHandler : IRequestHandler<GetUsersQuery, Result<PagedR
 {
     private readonly UserManager<User> _userManager;
     private readonly IUserRoleService _userRoleService;
+    private readonly ICurrentUserService _currentUserService;
+    private readonly IOrganizationContext _organizationContext;
     private readonly ILogger<GetUsersQueryHandler> _logger;
 
     public GetUsersQueryHandler(
         UserManager<User> userManager,
         IUserRoleService userRoleService,
+        ICurrentUserService currentUserService,
+        IOrganizationContext organizationContext,
         ILogger<GetUsersQueryHandler> logger)
     {
         _userManager = userManager;
         _userRoleService = userRoleService;
+        _currentUserService = currentUserService;
+        _organizationContext = organizationContext;
         _logger = logger;
     }
 
     public async Task<Result<PagedResult<UserDto>>> Handle(GetUsersQuery request, CancellationToken cancellationToken)
     {
         var query = _userManager.Users.AsQueryable();
+
+        var isSuperAdmin = _currentUserService.Roles.Contains(DomainRoles.SuperAdmin);
+        if (!isSuperAdmin)
+        {
+            if (!_organizationContext.OrganizationId.HasValue)
+            {
+                return Result.Failure<PagedResult<UserDto>>("Tenant context not found");
+            }
+
+            var orgId = _organizationContext.OrganizationId.Value;
+            query = query.Where(u => u.OrganizationId == orgId);
+        }
 
         // Apply filters
         if (!string.IsNullOrWhiteSpace(request.Search))

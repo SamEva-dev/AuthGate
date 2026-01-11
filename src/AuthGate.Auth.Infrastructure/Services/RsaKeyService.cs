@@ -7,6 +7,7 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Linq;
+using System.Text;
 
 namespace AuthGate.Auth.Infrastructure.Services;
 
@@ -157,7 +158,8 @@ public class RsaKeyService
         {
             if (File.Exists(_keystorePath))
             {
-                var json = File.ReadAllText(_keystorePath);
+                var payload = File.ReadAllText(_keystorePath);
+                var json = TryUnprotectKeystorePayload(payload) ?? payload;
                 _keystore = JsonSerializer.Deserialize<Keystore>(json) ?? new Keystore();
             }
 
@@ -176,8 +178,42 @@ public class RsaKeyService
         {
             Directory.CreateDirectory(Path.GetDirectoryName(_keystorePath)!);
             var json = JsonSerializer.Serialize(_keystore, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(_keystorePath, json);
+
+            var toPersist = ProtectKeystorePayload(json);
+            File.WriteAllText(_keystorePath, toPersist);
         }
+    }
+
+    private const string ProtectedPrefix = "dpapi:";
+
+    private string ProtectKeystorePayload(string json)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return json;
+        }
+
+        var bytes = Encoding.UTF8.GetBytes(json);
+        var protectedBytes = ProtectedData.Protect(bytes, optionalEntropy: null, scope: DataProtectionScope.CurrentUser);
+        return ProtectedPrefix + Convert.ToBase64String(protectedBytes);
+    }
+
+    private string? TryUnprotectKeystorePayload(string payload)
+    {
+        if (!payload.StartsWith(ProtectedPrefix, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        if (!OperatingSystem.IsWindows())
+        {
+            throw new PlatformNotSupportedException("DPAPI-protected keystore requires Windows.");
+        }
+
+        var b64 = payload.Substring(ProtectedPrefix.Length);
+        var protectedBytes = Convert.FromBase64String(b64);
+        var bytes = ProtectedData.Unprotect(protectedBytes, optionalEntropy: null, scope: DataProtectionScope.CurrentUser);
+        return Encoding.UTF8.GetString(bytes);
     }
 
     private void RotateIfNeeded()

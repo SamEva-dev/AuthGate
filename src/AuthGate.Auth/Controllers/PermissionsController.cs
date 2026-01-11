@@ -1,5 +1,6 @@
 using AuthGate.Auth.Application.Features.Permissions.Queries.GetPermissions;
 using AuthGate.Auth.Authorization;
+using AuthGate.Auth.Domain.Constants;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -8,7 +9,7 @@ namespace AuthGate.Auth.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+[Authorize(Roles = $"{Roles.SuperAdmin},{Roles.TenantOwner}")]
 public class PermissionsController : ControllerBase
 {
     private readonly IMediator _mediator;

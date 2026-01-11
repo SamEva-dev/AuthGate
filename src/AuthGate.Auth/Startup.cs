@@ -84,7 +84,8 @@ public class Startup
         {
             options.AddPolicy("AllowFrontend", policy =>
             {
-                var allowedOrigins = Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? new[] { "http://localhost:4200" };
+                var allowedOrigins = Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? 
+                new[] { "http://localhost:4200", "http://localhost:4300" };
                 policy.WithOrigins(allowedOrigins)
                     .AllowAnyMethod()
                     .AllowAnyHeader()
@@ -258,7 +259,7 @@ public class Startup
         {
             endpoints.MapControllers();
 
-            endpoints.MapPrometheusScrapingEndpoint("/metrics").AllowAnonymous();
+            endpoints.MapPrometheusScrapingEndpoint("/metrics").RequireAuthorization();
             
             // Health Check Endpoints (pour Kubernetes/Fly.io)
             endpoints.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions

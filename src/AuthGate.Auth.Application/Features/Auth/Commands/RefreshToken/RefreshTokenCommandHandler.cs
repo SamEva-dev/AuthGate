@@ -1,11 +1,13 @@
 using AuthGate.Auth.Application.Common;
 using AuthGate.Auth.Application.Common.Interfaces;
 using AuthGate.Auth.Application.DTOs.Auth;
+using AuthGate.Auth.Application.Services;
+using AuthGate.Auth.Domain.Constants;
 using AuthGate.Auth.Domain.Entities;
-using AuthGate.Auth.Domain.Repositories;
+using AuthGate.Auth.Domain.Interfaces;
 using MediatR;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -98,6 +100,15 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, R
         // Generate new tokens using Identity
         var roles = await _userRoleService.GetUserRolesAsync(user);
         var permissions = await _userRoleService.GetUserPermissionsAsync(user);
+
+        // Restrict access to Access-Manager-Pro to specific roles only
+        // Allowed: SuperAdmin, TenantOwner
+        if (!roles.Any(r => string.Equals(r, Roles.SuperAdmin, StringComparison.OrdinalIgnoreCase)
+                         || string.Equals(r, Roles.TenantOwner, StringComparison.OrdinalIgnoreCase)))
+        {
+            _logger.LogWarning("Refresh denied for {UserId}: role not allowed", user.Id);
+            return Result.Failure<TokenResponseDto>("Access denied");
+        }
 
         if (!user.OrganizationId.HasValue || user.OrganizationId.Value == Guid.Empty)
         {

@@ -32,7 +32,12 @@ public static class DependencyInjection
         // Main Database (Auth)
         services.AddDbContext<AuthDbContext>(options =>
         {
-            if (provider == "sqlite")
+            if (provider == "inmemory")
+            {
+                var dbName = configuration["Database:InMemory:AuthDbName"];
+                options.UseInMemoryDatabase(string.IsNullOrWhiteSpace(dbName) ? "AuthGate_InMemory_Auth" : dbName);
+            }
+            else if (provider == "sqlite")
             {
                 options.UseSqlite(
                     configuration.GetConnectionString("SqliteConnection"),
@@ -40,7 +45,7 @@ public static class DependencyInjection
             }
             else
             {
-                // Use DATABASE_URL from Fly.io, or fallback to DefaultConnection
+                // Use DATABASE_URL from Fly.io, or fallback to DefaultConnection_Auth
                 var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
                 string connectionString;
                 
@@ -54,7 +59,7 @@ public static class DependencyInjection
                 }
                 else
                 {
-                    connectionString = configuration.GetConnectionString("DefaultConnection");
+                    connectionString = configuration.GetConnectionString("DefaultConnection_Auth");
                 }
                 
                 options.UseNpgsql(
@@ -69,7 +74,12 @@ public static class DependencyInjection
         // Audit Database (Separate)
         services.AddDbContext<AuditDbContext>(options =>
         {
-            if (provider == "sqlite")
+            if (provider == "inmemory")
+            {
+                var dbName = configuration["Database:InMemory:AuditDbName"];
+                options.UseInMemoryDatabase(string.IsNullOrWhiteSpace(dbName) ? "AuthGate_InMemory_Audit" : dbName);
+            }
+            else if (provider == "sqlite")
             {
                 options.UseSqlite(
                     configuration.GetConnectionString("SqliteAuditConnection"),
@@ -77,7 +87,7 @@ public static class DependencyInjection
             }
             else
             {
-                // Use DATABASE_URL from Fly.io, or fallback to AuditConnection
+                // Use DATABASE_URL from Fly.io, or fallback to AuditConnection_Auth
                 var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
                 string connectionString;
                 
@@ -91,7 +101,7 @@ public static class DependencyInjection
                 }
                 else
                 {
-                    connectionString = configuration.GetConnectionString("AuditConnection");
+                    connectionString = configuration.GetConnectionString("AuditConnection_Auth");
                 }
                 
                 options.UseNpgsql(

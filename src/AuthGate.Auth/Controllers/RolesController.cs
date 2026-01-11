@@ -2,6 +2,7 @@ using AuthGate.Auth.Application.Features.Roles.Commands.AssignPermissionToRole;
 using AuthGate.Auth.Application.Features.Roles.Commands.RemovePermissionFromRole;
 using AuthGate.Auth.Application.Features.Roles.Queries.GetRoles;
 using AuthGate.Auth.Authorization;
+using AuthGate.Auth.Domain.Constants;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -10,7 +11,7 @@ namespace AuthGate.Auth.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+[Authorize(Roles = $"{Roles.SuperAdmin},{Roles.TenantOwner}")]
 public class RolesController : ControllerBase
 {
     private readonly IMediator _mediator;

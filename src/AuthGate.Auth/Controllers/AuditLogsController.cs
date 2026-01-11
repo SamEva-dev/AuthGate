@@ -1,14 +1,17 @@
 using AuthGate.Auth.Application.Features.AuditLogs.Commands.DeleteAuditLog;
 using AuthGate.Auth.Application.Features.AuditLogs.Queries.GetAuditLog;
 using AuthGate.Auth.Application.Features.AuditLogs.Queries.GetAuditLogs;
+using AuthGate.Auth.Authorization;
 using AuthGate.Auth.Domain.Enums;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AuthGate.Auth.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class AuditLogsController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -19,6 +22,7 @@ public class AuditLogsController : ControllerBase
     }
 
     [HttpGet]
+    [HasPermission("auditlogs.read")]
     public async Task<IActionResult> GetAll(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
@@ -46,6 +50,7 @@ public class AuditLogsController : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [HasPermission("auditlogs.read")]
     public async Task<IActionResult> GetById(Guid id)
     {
         var result = await _mediator.Send(new GetAuditLogQuery(id));
@@ -61,6 +66,7 @@ public class AuditLogsController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [HasPermission("auditlogs.delete")]
     public async Task<IActionResult> Delete(Guid id)
     {
         var result = await _mediator.Send(new DeleteAuditLogCommand(id));
