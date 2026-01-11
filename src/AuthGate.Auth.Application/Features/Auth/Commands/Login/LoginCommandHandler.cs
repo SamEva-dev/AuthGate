@@ -1,10 +1,8 @@
+using AuthGate.Auth.Application.Common;
 using AuthGate.Auth.Application.Common.Interfaces;
 using AuthGate.Auth.Application.DTOs.Auth;
-using AuthGate.Auth.Application.Services;
-using AuthGate.Auth.Domain.Constants;
 using AuthGate.Auth.Domain.Entities;
-using AuthGate.Auth.Domain.Interfaces;
-using AuthGate.Auth.Domain.ValueObjects;
+using AuthGate.Auth.Domain.Repositories;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging;
@@ -110,8 +108,8 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<LoginRes
 
                         // Restrict access to Access-Manager-Pro to specific roles only
                         // Allowed: SuperAdmin, TenantOwner
-                        if (!trustedRoles.Any(r => string.Equals(r, Roles.SuperAdmin, StringComparison.OrdinalIgnoreCase)
-                                               || string.Equals(r, Roles.TenantOwner, StringComparison.OrdinalIgnoreCase)))
+                        if (!trustedRoles.Any(r => string.Equals(r, Domain.Constants.Roles.SuperAdmin, StringComparison.OrdinalIgnoreCase)
+                                               || string.Equals(r, Domain.Constants.Roles.TenantOwner, StringComparison.OrdinalIgnoreCase)))
                         {
                             _logger.LogWarning("Login denied for {UserId} ({Email}): role not allowed", user.Id, user.Email);
                             return Result.Failure<LoginResponseDto>("Access denied");
@@ -186,8 +184,8 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<LoginRes
 
             // Restrict access to Access-Manager-Pro to specific roles only
             // Allowed: SuperAdmin, TenantOwner
-            if (!roles.Any(r => string.Equals(r, Roles.SuperAdmin, StringComparison.OrdinalIgnoreCase)
-                             || string.Equals(r, Roles.TenantOwner, StringComparison.OrdinalIgnoreCase)))
+            if (!roles.Any(r => string.Equals(r, Domain.Constants.Roles.SuperAdmin, StringComparison.OrdinalIgnoreCase)
+                             || string.Equals(r, Domain.Constants.Roles.TenantOwner, StringComparison.OrdinalIgnoreCase)))
             {
                 _logger.LogWarning("Login denied for {UserId} ({Email}): role not allowed", user.Id, user.Email);
                 return Result.Failure<LoginResponseDto>("Access denied");
