@@ -22,7 +22,7 @@ WORKDIR /app
 # Security: run as non-root
 RUN addgroup --system dotnetapp && adduser --system --ingroup dotnetapp dotnetapp
 ENV AUTHGATE_HOME=/app/AuthGate
-RUN mkdir -p /app/AuthGate && chown -R dotnetapp:dotnetapp /app/AuthGate
+RUN mkdir -p /app/AuthGate /app/AuthGate/Data && chown -R dotnetapp:dotnetapp /app/AuthGate
 USER dotnetapp
 
 ENV ASPNETCORE_URLS=http://+:8080
