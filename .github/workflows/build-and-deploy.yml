@@ -86,4 +86,3 @@ jobs:
               docker compose --profile staging pull authgate-staging
               docker compose --profile staging up -d --no-deps authgate-staging
             fi
-EOF
