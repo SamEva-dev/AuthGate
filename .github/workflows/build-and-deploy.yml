@@ -1,88 +1,20 @@
-name: Build & Deploy
+- name: Prepare SSH
+  shell: bash
+  run: |
+    set -euo pipefail
+    mkdir -p ~/.ssh
+    chmod 700 ~/.ssh
 
-on:
-  push:
-    branches: [ "main", "preprod", "staging" ]
+    # Write private key from multi-line secret (NO base64)
+    printf '%s' "${{ secrets.VPS_SSH_KEY }}" | tr -d '\r' > ~/.ssh/id_ed25519_locaguest
+    chmod 600 ~/.ssh/id_ed25519_locaguest
 
-jobs:
-  build-push-deploy:
-    runs-on: ubuntu-latest
+    ssh-keyscan -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
+    chmod 600 ~/.ssh/known_hosts
 
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set tag
-        id: tag
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ "${GITHUB_REF_NAME}" = "main" ]; then echo "tag=prod" >> "$GITHUB_OUTPUT"; fi
-          if [ "${GITHUB_REF_NAME}" = "preprod" ]; then echo "tag=preprod" >> "$GITHUB_OUTPUT"; fi
-          if [ "${GITHUB_REF_NAME}" = "staging" ]; then echo "tag=staging" >> "$GITHUB_OUTPUT"; fi
-
-      - name: Login Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Build & Push
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/authgate:${{ steps.tag.outputs.tag }}
-            ${{ secrets.DOCKERHUB_USERNAME }}/authgate:sha-${{ github.sha }}
-
-      - name: Prepare SSH key + known_hosts
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-
-          # Key is stored as Base64 in GitHub secret VPS_SSH_KEY_B64
-          echo "${{ secrets.VPS_SSH_KEY_B64 }}" | base64 -d > ~/.ssh/id_ed25519_locaguest
-          chmod 600 ~/.ssh/id_ed25519_locaguest
-
-          ssh-keyscan -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/known_hosts
-
-          # Minimal connectivity test
-          ssh -i ~/.ssh/id_ed25519_locaguest -o IdentitiesOnly=yes \
-            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
-            "whoami && docker version && docker compose version"
-
-      - name: Deploy (SSH)
-        shell: bash
-        env:
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-          TAG: ${{ steps.tag.outputs.tag }}
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-        run: |
-          set -euo pipefail
-
-          ssh -i ~/.ssh/id_ed25519_locaguest -o IdentitiesOnly=yes "${VPS_USER}@${VPS_HOST}" << EOF
-            set -euo pipefail
-            cd /opt/locaguest/compose
-
-            docker login -u "${DOCKERHUB_USERNAME}" -p "${DOCKERHUB_TOKEN}"
-
-            if [ "${TAG}" = "prod" ]; then
-              docker compose pull authgate-prod
-              docker compose up -d --no-deps authgate-prod
-            fi
-
-            if [ "${TAG}" = "preprod" ]; then
-              docker compose --profile preprod pull authgate-preprod
-              docker compose --profile preprod up -d --no-deps authgate-preprod
-            fi
-
-            if [ "${TAG}" = "staging" ]; then
-              docker compose --profile staging pull authgate-staging
-              docker compose --profile staging up -d --no-deps authgate-staging
-            fi
+- name: SSH connectivity test
+  shell: bash
+  run: |
+    ssh -i ~/.ssh/id_ed25519_locaguest -o IdentitiesOnly=yes \
+      "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+      "whoami && docker version && docker compose version"
