@@ -22,7 +22,7 @@ try
 
     var builder = WebApplication.CreateBuilder(args);
 
-    if (builder.Environment.IsDevelopment() || app.Environment.IsStaging())
+    if (builder.Environment.IsDevelopment() || builder.Environment.IsStaging())
     {
         try
         {
