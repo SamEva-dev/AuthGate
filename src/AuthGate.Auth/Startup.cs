@@ -207,7 +207,7 @@ public class Startup
         }
 
         var swaggerEnabled = env.IsDevelopment() || Configuration.GetValue<bool>("Swagger:Enabled");
-        if (swaggerEnabled)
+        if (env.IsDevelopment() || env.IsStaging())
         {
             app.UseSwagger();
             app.UseSwaggerUI(c =>
