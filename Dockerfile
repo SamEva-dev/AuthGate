@@ -20,8 +20,8 @@ FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
 WORKDIR /app
 
 # Security: run as non-root
-RUN addgroup --system app && adduser --system --ingroup app app
-USER app
+RUN addgroup --system dotnetapp && adduser --system --ingroup dotnetapp dotnetapp
+USER dotnetapp
 
 ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080
