@@ -31,6 +31,23 @@ jobs:
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/authgate:${{ steps.tag.outputs.tag }}
             ${{ secrets.DOCKERHUB_USERNAME }}/authgate:sha-${{ github.sha }}
+      - name: Deploy SSH (debug connectivity)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p ~/.ssh
+
+          # Ecrit la clé privée telle quelle (en retirant les \r Windows)
+          printf '%s' "${{ secrets.VPS_SSH_KEY }}" | tr -d '\r' > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+          # Ajout du host dans known_hosts (évite le prompt interactif)
+          ssh-keyscan -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
+
+          # Test minimal
+          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            "whoami && docker version && docker compose version"
 
       - name: Deploy (SSH)
         uses: appleboy/ssh-action@v1.0.3
