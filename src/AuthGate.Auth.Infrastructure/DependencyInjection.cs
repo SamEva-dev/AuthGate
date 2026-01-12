@@ -27,7 +27,7 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
-        var provider = configuration["Database:Provider"]?.ToLowerInvariant();
+        var provider = configuration["Database:Provider"]?.ToLowerInvariant() ?? "postgresql";
 
         // Main Database (Auth)
         services.AddDbContext<AuthDbContext>(options =>
@@ -39,9 +39,7 @@ public static class DependencyInjection
             }
             else if (provider == "sqlite")
             {
-                options.UseSqlite(
-                    configuration.GetConnectionString("SqliteConnection"),
-                    b => b.MigrationsAssembly(typeof(AuthDbContext).Assembly.FullName));
+                throw new InvalidOperationException("SQLite is no longer supported. Set Database:Provider to 'postgresql'.");
             }
             else
             {
@@ -81,9 +79,7 @@ public static class DependencyInjection
             }
             else if (provider == "sqlite")
             {
-                options.UseSqlite(
-                    configuration.GetConnectionString("SqliteAuditConnection"),
-                    b => b.MigrationsAssembly(typeof(AuditDbContext).Assembly.FullName));
+                throw new InvalidOperationException("SQLite is no longer supported. Set Database:Provider to 'postgresql'.");
             }
             else
             {
