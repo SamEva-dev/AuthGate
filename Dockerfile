@@ -21,10 +21,12 @@ WORKDIR /app
 
 # Security: run as non-root
 RUN addgroup --system dotnetapp && adduser --system --ingroup dotnetapp dotnetapp
+ENV AUTHGATE_HOME=/app/AuthGate
+RUN mkdir -p /app/AuthGate && chown -R dotnetapp:dotnetapp /app/AuthGate
 USER dotnetapp
 
 ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080
 
-COPY --from=build /app/publish ./
+COPY --from=build --chown=dotnetapp:dotnetapp /app/publish ./
 ENTRYPOINT ["dotnet", "AuthGate.Auth.dll"]
