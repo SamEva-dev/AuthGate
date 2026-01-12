@@ -1,32 +1,26 @@
-name: Build & Deploy (branches)
+name: AuthGate - Build & Promote (staging -> preprod -> prod)
 
 on:
   push:
-    branches: ["main", "preprod", "staging"]
+    branches: ["main"]
 
 concurrency:
-  group: authgate-${{ github.ref_name }}
+  group: authgate-main
   cancel-in-progress: false
 
 jobs:
-  build-push-deploy:
+  build_push:
     runs-on: ubuntu-latest
-
+    outputs:
+      image_tag: ${{ steps.meta.outputs.image_tag }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set env tag
-        id: tag
+      - name: Compute image tag
+        id: meta
         shell: bash
         run: |
-          set -euo pipefail
-          case "${GITHUB_REF_NAME}" in
-            main)    echo "env=prod" >> "$GITHUB_OUTPUT" ;;
-            preprod) echo "env=preprod" >> "$GITHUB_OUTPUT" ;;
-            staging) echo "env=staging" >> "$GITHUB_OUTPUT" ;;
-            *) echo "Unsupported branch: ${GITHUB_REF_NAME}" >&2; exit 1 ;;
-          esac
-          echo "sha_tag=sha-${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "image_tag=sha-${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
 
       - name: Login Docker Hub
         uses: docker/login-action@v3
@@ -34,20 +28,20 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Set up Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build & Push
+      - name: Build & Push (immutable)
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./Dockerfile
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/authgate:${{ steps.tag.outputs.env }}
-            ${{ secrets.DOCKERHUB_USERNAME }}/authgate:${{ steps.tag.outputs.sha_tag }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/authgate:${{ steps.meta.outputs.image_tag }}
 
-      - name: Deploy (SSH)
+  deploy_staging:
+    runs-on: ubuntu-latest
+    needs: [build_push]
+    environment: staging
+    steps:
+      - name: Deploy to STAGING (VPS)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -56,18 +50,16 @@ jobs:
           script: |
             set -euo pipefail
 
-            ENV_NAME="${{ steps.tag.outputs.env }}"
-            IMAGE_TAG="sha-${{ github.sha }}"
-
+            IMAGE_TAG="${{ needs.build_push.outputs.image_tag }}"
             cd /opt/locaguest
 
-            # Docker login (évite d'exposer le token dans l'historique : password-stdin)
-            echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+            # Ensure dockerhub auth (for private repos; harmless if public)
+            docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" -p "${{ secrets.DOCKERHUB_TOKEN }}"
 
+            # Upsert KEY=VALUE into /opt/locaguest/.env (no secrets printed)
             upsert_env () {
               local key="$1"
               local value="$2"
-              if [ ! -f .env ]; then touch .env; fi
               if grep -qE "^${key}=" .env; then
                 sed -i "s|^${key}=.*|${key}=${value}|" .env
               else
@@ -75,27 +67,85 @@ jobs:
               fi
             }
 
-            # Met à jour le tag utilisé par compose pour l'env ciblé
-            if [ "${ENV_NAME}" = "staging" ]; then
-              upsert_env "AUTHGATE_TAG_STAGING" "${IMAGE_TAG}"
-              docker compose --profile staging pull authgate-staging
-              docker compose --profile staging up -d authgate-db-staging authgate-staging
-              docker compose --profile staging ps
-            fi
+            upsert_env "AUTHGATE_TAG_STAGING" "${IMAGE_TAG}"
 
-            if [ "${ENV_NAME}" = "preprod" ]; then
-              upsert_env "AUTHGATE_TAG_PREPROD" "${IMAGE_TAG}"
-              docker compose --profile preprod pull authgate-preprod
-              docker compose --profile preprod up -d authgate-db-preprod authgate-preprod
-              docker compose --profile preprod ps
-            fi
-
-            if [ "${ENV_NAME}" = "prod" ]; then
-              upsert_env "AUTHGATE_TAG_PROD" "${IMAGE_TAG}"
-              docker compose --profile prod pull authgate-prod
-              docker compose --profile prod up -d authgate-db-prod authgate-prod
-              docker compose --profile prod ps
-            fi
-
-            # S'assure que Caddy tourne (HTTPS)
+            # Bring up edge proxy if not already running
             docker compose up -d caddy
+
+            # Pull + up staging (ensure DB is present, no --no-deps)
+            docker compose --profile staging pull authgate-staging
+            docker compose --profile staging up -d authgate-db-staging authgate-staging
+
+            docker compose --profile staging ps
+
+  deploy_preprod:
+    runs-on: ubuntu-latest
+    needs: [deploy_staging]
+    environment: preprod
+    steps:
+      - name: Promote to PREPROD (VPS)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -euo pipefail
+
+            IMAGE_TAG="sha-${{ github.sha }}"
+            cd /opt/locaguest
+
+            docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" -p "${{ secrets.DOCKERHUB_TOKEN }}"
+
+            upsert_env () {
+              local key="$1"
+              local value="$2"
+              if grep -qE "^${key}=" .env; then
+                sed -i "s|^${key}=.*|${key}=${value}|" .env
+              else
+                echo "${key}=${value}" >> .env
+              fi
+            }
+
+            upsert_env "AUTHGATE_TAG_PREPROD" "${IMAGE_TAG}"
+
+            docker compose up -d caddy
+            docker compose --profile preprod pull authgate-preprod
+            docker compose --profile preprod up -d authgate-db-preprod authgate-preprod
+            docker compose --profile preprod ps
+
+  deploy_prod:
+    runs-on: ubuntu-latest
+    needs: [deploy_preprod]
+    environment: prod
+    steps:
+      - name: Promote to PROD (VPS)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -euo pipefail
+
+            IMAGE_TAG="sha-${{ github.sha }}"
+            cd /opt/locaguest
+
+            docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" -p "${{ secrets.DOCKERHUB_TOKEN }}"
+
+            upsert_env () {
+              local key="$1"
+              local value="$2"
+              if grep -qE "^${key}=" .env; then
+                sed -i "s|^${key}=.*|${key}=${value}|" .env
+              else
+                echo "${key}=${value}" >> .env
+              fi
+            }
+
+            upsert_env "AUTHGATE_TAG_PROD" "${IMAGE_TAG}"
+
+            docker compose up -d caddy
+            docker compose --profile prod pull authgate-prod
+            docker compose --profile prod up -d authgate-db-prod authgate-prod
+            docker compose --profile prod ps
