@@ -20,9 +20,9 @@ FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
 WORKDIR /app
 
 # Security: run as non-root
-RUN addgroup --system dotnetapp && adduser --system --ingroup dotnetapp dotnetapp
+RUN addgroup --system --gid 10001 dotnetapp && adduser --system --uid 10001 --ingroup dotnetapp dotnetapp
 ENV AUTHGATE_HOME=/app/AuthGate
-RUN mkdir -p /app/AuthGate /app/AuthGate/Data && chown -R dotnetapp:dotnetapp /app/AuthGate
+RUN mkdir -p /app/AuthGate /app/AuthGate/Data /app/AuthGate/log && chown -R dotnetapp:dotnetapp /app/AuthGate
 USER dotnetapp
 
 ENV ASPNETCORE_URLS=http://+:8080
