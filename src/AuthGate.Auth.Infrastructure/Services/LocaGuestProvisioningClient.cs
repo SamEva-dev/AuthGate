@@ -51,11 +51,15 @@ public sealed class LocaGuestProvisioningClient : ILocaGuestProvisioningClient
 
             primary.Dispose();
 
+            // Legacy payload differs from provisioning payload; reuse of the same idempotency key would
+            // trigger an idempotency conflict (409) server-side.
+            var legacyIdempotencyKey = Guid.NewGuid().ToString("D");
+
             var legacy = await SendLegacyAsync(
                 path: "api/organizations",
                 request: request,
                 bearerToken: token,
-                idempotencyKey: idempotencyKey,
+                idempotencyKey: legacyIdempotencyKey,
                 ct: ct);
 
             return await HandleLegacyResponseAsync(legacy, ct);
