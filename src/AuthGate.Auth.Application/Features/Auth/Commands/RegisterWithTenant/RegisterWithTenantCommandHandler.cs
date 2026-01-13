@@ -41,6 +41,7 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
         CancellationToken cancellationToken)
     {
         Guid? createdOrganizationId = null;
+        User? createdUser = null;
         
         try
         {
@@ -86,7 +87,7 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
                 FirstName = request.FirstName,
                 LastName = request.LastName,
                 OrganizationId = provisioned.OrganizationId, // Link to LocaGuest Organization
-                IsActive = true,
+                IsActive = false,
                 MfaEnabled = false,
                 CreatedAtUtc = DateTime.UtcNow
             };
@@ -104,6 +105,8 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
                 return Result.Failure<RegisterWithTenantResponse>($"Failed to create user: {errors}");
             }
 
+            createdUser = user;
+
             // 4. Assign TenantOwner role
             var roleResult = await _userManager.AddToRoleAsync(user, Domain.Constants.Roles.TenantOwner);
 
@@ -114,6 +117,7 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
                 
                 // ROLLBACK: Delete user and organization
                 await _userManager.DeleteAsync(user);
+                createdUser = null;
                 await RollbackOrganizationAsync(createdOrganizationId.Value, cancellationToken);
                 
                 return Result.Failure<RegisterWithTenantResponse>($"Failed to assign role: {roleErrors}");
@@ -121,6 +125,9 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
 
             // 5. Generate JWT with tenant claims
             var (accessToken, refreshToken) = await _tokenService.GenerateTokensAsync(user);
+
+            user.IsActive = true;
+            await _userManager.UpdateAsync(user);
 
             _logger.LogInformation(
                 "User registered successfully: {UserId} - {Email} - Organization: {OrganizationCode}",
@@ -143,6 +150,19 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error during registration workflow for {Email}", request.Email);
+
+            // COMPENSATING TRANSACTION: Rollback user if it was created
+            if (createdUser is not null)
+            {
+                try
+                {
+                    await _userManager.DeleteAsync(createdUser);
+                }
+                catch (Exception deleteEx)
+                {
+                    _logger.LogError(deleteEx, "ROLLBACK EXCEPTION: Failed to delete user {UserId}. MANUAL CLEANUP REQUIRED!", createdUser.Id);
+                }
+            }
             
             // COMPENSATING TRANSACTION: Rollback organization if it was created
             if (createdOrganizationId.HasValue)
