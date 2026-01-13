@@ -199,7 +199,10 @@ public class Startup
             app.UseDeveloperExceptionPage();
         }
 
-        if (!env.IsDevelopment() && Configuration.GetValue<bool>("Identity:SeedRoles"))
+        var seedRolesConfigured = Configuration.GetValue<bool?>("Identity:SeedRoles");
+        var seedRoles = seedRolesConfigured ?? true;
+
+        if (!env.IsDevelopment() && seedRoles)
         {
             using var scope = app.ApplicationServices.CreateScope();
             var seeder = scope.ServiceProvider.GetRequiredService<AuthGate.Auth.Infrastructure.Persistence.DataSeeding.AuthDbSeeder>();
