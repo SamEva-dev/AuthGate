@@ -125,7 +125,7 @@ public class InviteCollaboratorCommandHandler : IRequestHandler<InviteCollaborat
             await _context.SaveChangesAsync(cancellationToken);
 
             // 7. Generate invitation URL
-            var frontendUrl = _configuration["Frontend:BaseUrl"] ?? "http://localhost:4200";
+            var frontendUrl = _configuration["Frontend:BaseUrl"];
             var invitationUrl = $"{frontendUrl}/accept-invitation/{token}";
 
             // 8. ✅ Send invitation email
