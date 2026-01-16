@@ -139,17 +139,22 @@ jobs:
             set -euo pipefail
 
             IMAGE_TAG="sha-${{ github.sha }}"
-            cd /opt/locaguest
+            ROOT="/opt/locaguest"
+            ENV_FILE="${ROOT}/env/.env"
+            COMPOSE_FILE="${ROOT}/config/docker-compose.yml"
+            mkdir -p "${ROOT}/env"
+            touch "${ENV_FILE}"
+            cd "${ROOT}"
 
-            docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" -p "${{ secrets.DOCKERHUB_TOKEN }}"
+            echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
 
             upsert_env () {
               local key="$1"
               local value="$2"
-              if grep -qE "^${key}=" .env; then
-                sed -i "s|^${key}=.*|${key}=${value}|" .env
+              if grep -qE "^${key}=" "${ENV_FILE}"; then
+                sed -i "s|^${key}=.*|${key}=${value}|" "${ENV_FILE}"
               else
-                echo "${key}=${value}" >> .env
+                echo "${key}=${value}" >> "${ENV_FILE}"
               fi
             }
 
