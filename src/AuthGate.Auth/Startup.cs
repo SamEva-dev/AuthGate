@@ -288,14 +288,30 @@ public class Startup
                 }
             }).AllowAnonymous();
 
+            // Public SaaS health endpoint (Uptime-Kuma)
+            endpoints.MapHealthChecks("/healthz", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+            {
+                Predicate = _ => true
+            }).AllowAnonymous();
+
             // Readiness probe
             endpoints.MapHealthChecks("/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
             {
                 Predicate = check => check.Tags.Contains("ready")
             }).AllowAnonymous();
 
+            endpoints.MapHealthChecks("/healthz/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+            {
+                Predicate = check => check.Tags.Contains("ready")
+            }).AllowAnonymous();
+
             // Liveness probe
             endpoints.MapHealthChecks("/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+            {
+                Predicate = check => check.Tags.Contains("live")
+            }).AllowAnonymous();
+
+            endpoints.MapHealthChecks("/healthz/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
             {
                 Predicate = check => check.Tags.Contains("live")
             }).AllowAnonymous();
