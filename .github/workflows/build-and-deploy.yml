@@ -86,9 +86,24 @@ jobs:
 
             docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" --profile staging ps
 
-  deploy_preprod:
+  # ========================================
+  # VALIDATION MANUELLE: Staging -> PreProd
+  # ========================================
+  approve_preprod:
     runs-on: ubuntu-latest
     needs: [deploy_staging]
+    environment:
+      name: preprod-approval
+    steps:
+      - name: Approval Gate
+        run: |
+          echo "✅ Deployment to PREPROD approved by: ${{ github.actor }}"
+          echo "📦 Image tag: sha-${{ github.sha }}"
+          echo "🕐 Approved at: $(date -u)"
+
+  deploy_preprod:
+    runs-on: ubuntu-latest
+    needs: [approve_preprod]
     environment: preprod
     steps:
       - name: Promote to PREPROD (VPS)
@@ -130,9 +145,25 @@ jobs:
             docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" --profile preprod up -d authgate-db-preprod authgate-preprod
             docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" --profile preprod ps
 
-  deploy_prod:
+  # ========================================
+  # VALIDATION MANUELLE: PreProd -> Prod
+  # ========================================
+  approve_prod:
     runs-on: ubuntu-latest
     needs: [deploy_preprod]
+    environment:
+      name: prod-approval
+    steps:
+      - name: Approval Gate
+        run: |
+          echo "✅ Deployment to PRODUCTION approved by: ${{ github.actor }}"
+          echo "📦 Image tag: sha-${{ github.sha }}"
+          echo "🕐 Approved at: $(date -u)"
+          echo "⚠️  This is a PRODUCTION deployment!"
+
+  deploy_prod:
+    runs-on: ubuntu-latest
+    needs: [approve_prod]
     environment: prod
     steps:
       - name: Promote to PROD (VPS)
