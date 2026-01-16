@@ -1,9 +1,12 @@
+using System.Text.Json;
 using AuthGate.Auth.Application.Common;
-using AuthGate.Auth.Application.Common.Clients;
-using AuthGate.Auth.Application.Common.Clients.Models;
+using AuthGate.Auth.Application.Common.Interfaces;
 using AuthGate.Auth.Application.Services;
 using AuthGate.Auth.Domain.Constants;
+using Roles = AuthGate.Auth.Domain.Constants.Roles;
 using AuthGate.Auth.Domain.Entities;
+using AuthGate.Auth.Domain.Enums;
+using AuthGate.Auth.Domain.Repositories;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging;
@@ -11,28 +14,32 @@ using Microsoft.Extensions.Logging;
 namespace AuthGate.Auth.Application.Features.Auth.Commands.RegisterWithTenant;
 
 /// <summary>
-/// Orchestrates the registration workflow:
-/// 1. Call LocaGuest API to create Organization (Tenant)
-/// 2. Create User in AuthGate with OrganizationId
+/// Orchestrates the registration workflow using the Outbox Pattern for resilience:
+/// 1. Create User in AuthGate with Status = PendingProvisioning
+/// 2. Add OutboxMessage for async organization provisioning
 /// 3. Assign TenantOwner role
-/// 4. Generate JWT with tenant claims
+/// 4. Generate JWT (limited until provisioning completes)
+/// 5. Return immediately - provisioning happens async via OutboxProcessor
 /// </summary>
 public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTenantCommand, Result<RegisterWithTenantResponse>>
 {
     private readonly UserManager<User> _userManager;
     private readonly ITokenService _tokenService;
-    private readonly ILocaGuestProvisioningClient _provisioningClient;
+    private readonly IOutboxRepository _outboxRepository;
+    private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<RegisterWithTenantCommandHandler> _logger;
 
     public RegisterWithTenantCommandHandler(
         UserManager<User> userManager,
         ITokenService tokenService,
-        ILocaGuestProvisioningClient provisioningClient,
+        IOutboxRepository outboxRepository,
+        IUnitOfWork unitOfWork,
         ILogger<RegisterWithTenantCommandHandler> logger)
     {
         _userManager = userManager;
         _tokenService = tokenService;
-        _provisioningClient = provisioningClient;
+        _outboxRepository = outboxRepository;
+        _unitOfWork = unitOfWork;
         _logger = logger;
     }
 
@@ -40,7 +47,6 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
         RegisterWithTenantCommand request,
         CancellationToken cancellationToken)
     {
-        Guid? createdOrganizationId = null;
         User? createdUser = null;
         
         try
@@ -52,156 +58,117 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
                 return Result.Failure<RegisterWithTenantResponse>($"User with email '{request.Email}' already exists");
             }
 
-            // 2. Call LocaGuest API to create Organization (Tenant)
-            _logger.LogInformation("Creating organization in LocaGuest for {Email}", request.Email);
-
             var userId = Guid.NewGuid();
 
-            var orgRequest = new ProvisionOrganizationRequest
-            {
-                OrganizationName = request.OrganizationName,
-                OrganizationEmail = request.Email,
-                OrganizationPhone = request.Phone,
-                OwnerUserId = userId.ToString("D"),
-                OwnerEmail = request.Email
-            };
-
-            var provisioned = await _provisioningClient.ProvisionOrganizationAsync(orgRequest, cancellationToken);
-
-            if (provisioned is null)
-            {
-                return Result.Failure<RegisterWithTenantResponse>("Failed to provision organization. Please try again.");
-            }
-
-            createdOrganizationId = provisioned.OrganizationId;
-
-            _logger.LogInformation("Organization provisioned: {Code} - {Name}", provisioned.Code, provisioned.Name);
-
-            // 3. Create User in AuthGate with OrganizationId
+            // 2. Create User in AuthGate with PendingProvisioning status
             var user = new User
             {
                 Id = userId,
                 UserName = request.Email,
                 Email = request.Email,
-                EmailConfirmed = true, // Auto-confirm for now
+                EmailConfirmed = true,
                 FirstName = request.FirstName,
                 LastName = request.LastName,
-                OrganizationId = provisioned.OrganizationId, // Link to LocaGuest Organization
+                OrganizationId = null, // Will be set after async provisioning
                 IsActive = false,
+                Status = UserStatus.PendingProvisioning,
                 MfaEnabled = false,
                 CreatedAtUtc = DateTime.UtcNow
             };
 
             var createResult = await _userManager.CreateAsync(user, request.Password);
             
-            if (!createResult.Succeeded)
+            if (createResult.Succeeded)
             {
                 var errors = string.Join(", ", createResult.Errors.Select(e => e.Description));
                 _logger.LogError("Failed to create user: {Errors}", errors);
-                
-                // COMPENSATING TRANSACTION: Delete organization since user creation failed
-                await RollbackOrganizationAsync(createdOrganizationId.Value, cancellationToken);
-                
                 return Result.Failure<RegisterWithTenantResponse>($"Failed to create user: {errors}");
             }
 
-            createdUser = user;
+            createdUser = user; // Track for rollback
 
-            // 4. Assign TenantOwner role
-            var roleResult = await _userManager.AddToRoleAsync(user, Domain.Constants.Roles.TenantOwner);
+            // 3. Assign TenantOwner role
+            var roleResult = await _userManager.AddToRoleAsync(user, AuthGate.Auth.Domain.Constants.Roles.TenantOwner);
 
             if (!roleResult.Succeeded)
             {
                 var roleErrors = string.Join(", ", roleResult.Errors.Select(e => e.Description));
                 _logger.LogError("Failed to assign TenantOwner role to user {UserId}: {Errors}", user.Id, roleErrors);
                 
-                // ROLLBACK: Delete user and organization
-                await _userManager.DeleteAsync(user);
-                createdUser = null;
-                await RollbackOrganizationAsync(createdOrganizationId.Value, cancellationToken);
-                
+                // Rollback user creation
+                await RollbackUserAsync(createdUser);
                 return Result.Failure<RegisterWithTenantResponse>($"Failed to assign role: {roleErrors}");
             }
 
-            // 5. Generate JWT with tenant claims
-            var (accessToken, refreshToken) = await _tokenService.GenerateTokensAsync(user);
+            // 4. Generate JWT BEFORE saving outbox (use pending provisioning tokens)
+            var (accessToken, refreshToken) = await _tokenService.GeneratePendingProvisioningTokensAsync(user);
 
-            user.IsActive = true;
-            await _userManager.UpdateAsync(user);
+            // 5. Create OutboxMessage for async organization provisioning
+            var payload = new ProvisionOrganizationPayload
+            {
+                UserId = userId,
+                Email = request.Email,
+                OrganizationName = request.OrganizationName,
+                Phone = request.Phone,
+                FirstName = request.FirstName,
+                LastName = request.LastName
+            };
+
+            var outboxMessage = OutboxMessage.Create(
+                OutboxMessageType.ProvisionOrganization,
+                JsonSerializer.Serialize(payload),
+                userId,
+                Guid.NewGuid().ToString("N") // CorrelationId for tracing
+            );
+
+            await _outboxRepository.AddAsync(outboxMessage, cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             _logger.LogInformation(
-                "User registered successfully: {UserId} - {Email} - Organization: {OrganizationCode}",
-                user.Id, user.Email, provisioned.Code);
+                "User created with pending provisioning: {UserId} - {Email}. OutboxMessage: {OutboxId}",
+                user.Id, user.Email, outboxMessage.Id);
 
             var responseDto = new RegisterWithTenantResponse
             {
                 UserId = user.Id,
                 Email = user.Email!,
-                OrganizationId = provisioned.OrganizationId,
-                OrganizationCode = provisioned.Code,
-                OrganizationName = provisioned.Name,
+                OrganizationId = null, // Not yet provisioned
+                OrganizationCode = null,
+                OrganizationName = request.OrganizationName, // Show requested name
                 AccessToken = accessToken,
                 RefreshToken = refreshToken,
-                Role = Domain.Constants.Roles.TenantOwner
+                Role = AuthGate.Auth.Domain.Constants.Roles.TenantOwner,
+                Status = "pending_provisioning",
+                Message = "Your account is being set up. You'll have full access shortly."
             };
 
             return Result<RegisterWithTenantResponse>.Success(responseDto);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during registration workflow for {Email}", request.Email);
-
-            // COMPENSATING TRANSACTION: Rollback user if it was created
-            if (createdUser is not null)
+            _logger.LogError(ex, "Error during registration for {Email}", request.Email);
+            
+            // Rollback user if created
+            if (createdUser != null)
             {
-                try
-                {
-                    await _userManager.DeleteAsync(createdUser);
-                }
-                catch (Exception deleteEx)
-                {
-                    _logger.LogError(deleteEx, "ROLLBACK EXCEPTION: Failed to delete user {UserId}. MANUAL CLEANUP REQUIRED!", createdUser.Id);
-                }
+                await RollbackUserAsync(createdUser);
             }
             
-            // COMPENSATING TRANSACTION: Rollback organization if it was created
-            if (createdOrganizationId.HasValue)
-            {
-                await RollbackOrganizationAsync(createdOrganizationId.Value, cancellationToken);
-            }
-            
-            return Result.Failure<RegisterWithTenantResponse>($"Registration failed: {ex.Message}");
+            return Result.Failure<RegisterWithTenantResponse>("Registration failed. Please try again.");
         }
     }
-    
-    /// <summary>
-    /// Compensating transaction: Delete organization in LocaGuest if user creation fails
-    /// Implements the Saga pattern for distributed transaction rollback
-    /// </summary>
-    private async Task RollbackOrganizationAsync(Guid organizationId, CancellationToken cancellationToken)
+
+    private async Task RollbackUserAsync(User user)
     {
         try
         {
-            _logger.LogWarning("ROLLBACK: Attempting to delete organization {OrganizationId} due to user creation failure", organizationId);
-
-            var deleted = await _provisioningClient.HardDeleteOrganizationAsync(organizationId, cancellationToken);
-
-            if (deleted)
-            {
-                _logger.LogInformation("ROLLBACK: Successfully deleted organization {OrganizationId}", organizationId);
-            }
-            else
-            {
-                _logger.LogError(
-                    "ROLLBACK FAILED: Could not delete organization {OrganizationId}. MANUAL CLEANUP REQUIRED!",
-                    organizationId);
-            }
+            _logger.LogWarning("ROLLBACK: Deleting user {UserId} due to registration failure", user.Id);
+            await _userManager.DeleteAsync(user);
+            _logger.LogInformation("ROLLBACK: User {UserId} deleted successfully", user.Id);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, 
-                "ROLLBACK EXCEPTION: Failed to delete organization {OrganizationId}. MANUAL CLEANUP REQUIRED!", 
-                organizationId);
+            _logger.LogError(ex, "ROLLBACK FAILED: Could not delete user {UserId}. MANUAL CLEANUP REQUIRED!", user.Id);
         }
     }
 }

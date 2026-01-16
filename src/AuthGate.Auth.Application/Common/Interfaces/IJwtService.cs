@@ -20,6 +20,16 @@ public interface IJwtService
     string GenerateAccessToken(Guid userId, string email, IEnumerable<string> roles, IEnumerable<string> permissions, bool mfaEnabled, Guid organizationId);
 
     /// <summary>
+    /// Generates a limited access token for users pending organization provisioning.
+    /// This token has restricted access and short expiry.
+    /// </summary>
+    /// <param name="userId">User ID</param>
+    /// <param name="email">User email</param>
+    /// <param name="roles">User roles</param>
+    /// <returns>JWT access token with "pending_provisioning" status claim</returns>
+    string GeneratePendingProvisioningToken(Guid userId, string email, IEnumerable<string> roles);
+
+    /// <summary>
     /// Generates a refresh token
     /// </summary>
     /// <returns>Refresh token string</returns>

@@ -44,10 +44,20 @@ public record RegisterWithTenantResponse
 {
     public Guid UserId { get; init; }
     public string Email { get; init; } = string.Empty;
-    public Guid OrganizationId { get; init; }
-    public string OrganizationCode { get; init; } = string.Empty;
-    public string OrganizationName { get; init; } = string.Empty;
+    public Guid? OrganizationId { get; init; }
+    public string? OrganizationCode { get; init; }
+    public string? OrganizationName { get; init; }
     public string AccessToken { get; init; } = string.Empty;
     public string RefreshToken { get; init; } = string.Empty;
     public string Role { get; init; } = string.Empty;
+    
+    /// <summary>
+    /// Status of the registration: "active" (fully provisioned) or "pending_provisioning" (async in progress)
+    /// </summary>
+    public string Status { get; init; } = "active";
+    
+    /// <summary>
+    /// Message to display to the user
+    /// </summary>
+    public string Message { get; init; } = string.Empty;
 }

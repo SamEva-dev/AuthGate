@@ -1,4 +1,5 @@
 using AuthGate.Auth.Domain.Common;
+using AuthGate.Auth.Domain.Enums;
 using Microsoft.AspNetCore.Identity;
 
 namespace AuthGate.Auth.Domain.Entities;
@@ -22,6 +23,11 @@ public class User : IdentityUser<Guid>, IAuditableEntity
     /// Gets or sets whether the user account is active
     /// </summary>
     public bool IsActive { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the provisioning status of the user
+    /// </summary>
+    public UserStatus Status { get; set; } = UserStatus.Active;
 
     /// <summary>
     /// Gets or sets the number of failed login attempts

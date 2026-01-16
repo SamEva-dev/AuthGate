@@ -63,6 +63,38 @@ public class JwtService : IJwtService
         return _tokenHandler.WriteToken(token);
     }
 
+    public string GeneratePendingProvisioningToken(Guid userId, string email, IEnumerable<string> roles)
+    {
+        var claims = new List<Claim>
+        {
+            new(JwtRegisteredClaimNames.Sub, userId.ToString()),
+            new(JwtRegisteredClaimNames.Email, email),
+            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            new("status", "pending_provisioning"),
+            new("mfa_enabled", "false")
+        };
+
+        foreach (var role in roles)
+        {
+            claims.Add(new Claim(ClaimNames.Roles, role));
+            claims.Add(new Claim(ClaimTypes.Role, role));
+        }
+
+        var signingKey = _rsaKeyService.GetSigningKey();
+        var credentials = new SigningCredentials(signingKey, SecurityAlgorithms.RsaSha256);
+
+        // Short-lived token (5 minutes) - user should refresh after provisioning completes
+        var token = new JwtSecurityToken(
+            issuer: _configuration["Jwt:Issuer"],
+            audience: _configuration["Jwt:Audience"],
+            claims: claims,
+            expires: DateTime.UtcNow.AddMinutes(5),
+            signingCredentials: credentials
+        );
+
+        return _tokenHandler.WriteToken(token);
+    }
+
     public string GenerateRefreshToken()
     {
         var randomNumber = new byte[64];

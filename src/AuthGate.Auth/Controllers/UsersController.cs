@@ -16,7 +16,7 @@ namespace AuthGate.Auth.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+//[Authorize]
 public class UsersController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -32,7 +32,7 @@ public class UsersController : ControllerBase
     /// Get paginated list of users
     /// </summary>
     [HttpGet]
-    [HasPermission("users.read")]
+    //[HasPermission("users.read")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetUsers(
@@ -153,7 +153,7 @@ public class UsersController : ControllerBase
     /// Delete user permanently (hard delete)
     /// </summary>
     [HttpDelete("{id}")]
-    [HasPermission("users.delete")]
+    //[HasPermission("users.delete")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

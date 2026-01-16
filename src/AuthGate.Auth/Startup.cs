@@ -9,6 +9,7 @@ using Microsoft.OpenApi.Models;
 using Serilog;
 using System.Text;
 using AuthGate.Auth.Infrastructure.Jobs;
+using AuthGate.Auth.Infrastructure.Options;
 using AuthGate.Auth.Middleware;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -73,6 +74,10 @@ public class Startup
 
         services.Configure<AuditRetentionOptions>(Configuration.GetSection("AuditRetention"));
         services.AddHostedService<AuditRetentionHostedService>();
+        
+        // Outbox Processor for reliable async operations (Registration, etc.)
+        services.Configure<OutboxProcessorOptions>(Configuration.GetSection(OutboxProcessorOptions.SectionName));
+        services.AddHostedService<OutboxProcessorService>();
 
         // Health Checks
         services.AddHealthChecks()

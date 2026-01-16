@@ -116,6 +116,7 @@ public static class DependencyInjection
         services.AddScoped<IMfaSecretRepository, MfaSecretRepository>();
         services.AddScoped<IRecoveryCodeRepository, RecoveryCodeRepository>();
         services.AddScoped<ITrustedDeviceRepository, TrustedDeviceRepository>();
+        services.AddScoped<IOutboxRepository, OutboxRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         // Audit repository (separate DB)

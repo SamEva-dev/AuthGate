@@ -80,6 +80,42 @@ public class TokenService : ITokenService
         return (accessToken, refreshToken);
     }
 
+    public async Task<(string AccessToken, string RefreshToken)> GeneratePendingProvisioningTokensAsync(User user)
+    {
+        // Get user roles (no permissions for pending users)
+        var roles = await _userRoleService.GetUserRolesAsync(user);
+
+        // Generate limited access token for pending provisioning
+        var accessToken = _jwtService.GeneratePendingProvisioningToken(
+            user.Id,
+            user.Email!,
+            roles
+        );
+
+        var refreshToken = _jwtService.GenerateRefreshToken();
+        var jwtId = _jwtService.GetJwtId(accessToken) ?? Guid.NewGuid().ToString();
+
+        var refreshTokenHash = HashRefreshToken(refreshToken);
+
+        // Store refresh token with shorter expiry for pending users
+        var refreshTokenEntity = new RefreshToken
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            Token = refreshTokenHash,
+            JwtId = jwtId,
+            IsUsed = false,
+            IsRevoked = false,
+            CreatedAtUtc = DateTime.UtcNow,
+            ExpiresAtUtc = DateTime.UtcNow.AddHours(1) // Shorter expiry for pending users
+        };
+
+        _context.RefreshTokens.Add(refreshTokenEntity);
+        await _context.SaveChangesAsync();
+
+        return (accessToken, refreshToken);
+    }
+
     public async Task<(string AccessToken, string RefreshToken)?> RefreshTokenAsync(string refreshToken)
     {
         var refreshTokenHash = HashRefreshToken(refreshToken);
