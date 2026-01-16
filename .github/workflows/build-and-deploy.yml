@@ -51,41 +51,37 @@ jobs:
             set -euo pipefail
 
             IMAGE_TAG="${{ needs.build_push.outputs.image_tag }}"
+            ROOT="/opt/locaguest"
+            ENV_FILE="${ROOT}/env/.env"
+            COMPOSE_FILE="${ROOT}/config/docker-compose.yml"
+            mkdir -p "${ROOT}/env"
+            touch "${ENV_FILE}"
+            cd "${ROOT}"
 
-            COMPOSE_DIR="/opt/locaguest/config"
-            COMPOSE_FILE="${COMPOSE_DIR}/docker-compose.yml"
-            ENV_FILE="/opt/locaguest/env/.env"
-
-            # Safety checks
-            sudo mkdir -p "$(dirname "$ENV_FILE")"
-            sudo touch "$ENV_FILE"
-            sudo chmod 600 "$ENV_FILE" || true
-
-            # dockerhub login (safe)
+            # Ensure dockerhub auth (for private repos; harmless if public)
             echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
 
-            # Upsert KEY=VALUE into ENV_FILE
+            # Upsert KEY=VALUE into /opt/locaguest/env/.env (no secrets printed)
             upsert_env () {
               local key="$1"
               local value="$2"
-              if sudo grep -qE "^${key}=" "$ENV_FILE"; then
-                sudo sed -i "s|^${key}=.*|${key}=${value}|" "$ENV_FILE"
+              if grep -qE "^${key}=" "${ENV_FILE}"; then
+                sed -i "s|^${key}=.*|${key}=${value}|" "${ENV_FILE}"
               else
-                echo "${key}=${value}" | sudo tee -a "$ENV_FILE" >/dev/null
+                echo "${key}=${value}" >> "${ENV_FILE}"
               fi
             }
 
             upsert_env "AUTHGATE_TAG_STAGING" "${IMAGE_TAG}"
 
-            cd "$COMPOSE_DIR"
+            # Bring up edge proxy if not already running
+            docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" up -d caddy
 
-            # Bring up reverse proxy
-            sudo docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d caddy
+            # Pull + up staging (ensure DB is present, no --no-deps)
+            docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" --profile staging pull authgate-staging
+            docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" --profile staging up -d authgate-db-staging authgate-staging
 
-            # Pull + up staging
-            sudo docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" --profile staging pull authgate-staging
-            sudo docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" --profile staging up -d authgate-db-staging authgate-staging
-            sudo docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" --profile staging ps
+            docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" --profile staging ps
 
   deploy_preprod:
     runs-on: ubuntu-latest
@@ -102,34 +98,31 @@ jobs:
             set -euo pipefail
 
             IMAGE_TAG="sha-${{ github.sha }}"
-
-            COMPOSE_DIR="/opt/locaguest/config"
-            COMPOSE_FILE="${COMPOSE_DIR}/docker-compose.yml"
-            ENV_FILE="/opt/locaguest/env/.env"
-
-            sudo mkdir -p "$(dirname "$ENV_FILE")"
-            sudo touch "$ENV_FILE"
-            sudo chmod 600 "$ENV_FILE" || true
+            ROOT="/opt/locaguest"
+            ENV_FILE="${ROOT}/env/.env"
+            COMPOSE_FILE="${ROOT}/config/docker-compose.yml"
+            mkdir -p "${ROOT}/env"
+            touch "${ENV_FILE}"
+            cd "${ROOT}"
 
             echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
 
             upsert_env () {
               local key="$1"
               local value="$2"
-              if sudo grep -qE "^${key}=" "$ENV_FILE"; then
-                sudo sed -i "s|^${key}=.*|${key}=${value}|" "$ENV_FILE"
+              if grep -qE "^${key}=" "${ENV_FILE}"; then
+                sed -i "s|^${key}=.*|${key}=${value}|" "${ENV_FILE}"
               else
-                echo "${key}=${value}" | sudo tee -a "$ENV_FILE" >/dev/null
+                echo "${key}=${value}" >> "${ENV_FILE}"
               fi
             }
 
             upsert_env "AUTHGATE_TAG_PREPROD" "${IMAGE_TAG}"
 
-            cd "$COMPOSE_DIR"
-            sudo docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d caddy
-            sudo docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" --profile preprod pull authgate-preprod
-            sudo docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" --profile preprod up -d authgate-db-preprod authgate-preprod
-            sudo docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" --profile preprod ps
+            docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" up -d caddy
+            docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" --profile preprod pull authgate-preprod
+            docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" --profile preprod up -d authgate-db-preprod authgate-preprod
+            docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" --profile preprod ps
 
   deploy_prod:
     runs-on: ubuntu-latest
@@ -146,31 +139,23 @@ jobs:
             set -euo pipefail
 
             IMAGE_TAG="sha-${{ github.sha }}"
+            cd /opt/locaguest
 
-            COMPOSE_DIR="/opt/locaguest/config"
-            COMPOSE_FILE="${COMPOSE_DIR}/docker-compose.yml"
-            ENV_FILE="/opt/locaguest/env/.env"
-
-            sudo mkdir -p "$(dirname "$ENV_FILE")"
-            sudo touch "$ENV_FILE"
-            sudo chmod 600 "$ENV_FILE" || true
-
-            echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+            docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" -p "${{ secrets.DOCKERHUB_TOKEN }}"
 
             upsert_env () {
               local key="$1"
               local value="$2"
-              if sudo grep -qE "^${key}=" "$ENV_FILE"; then
-                sudo sed -i "s|^${key}=.*|${key}=${value}|" "$ENV_FILE"
+              if grep -qE "^${key}=" .env; then
+                sed -i "s|^${key}=.*|${key}=${value}|" .env
               else
-                echo "${key}=${value}" | sudo tee -a "$ENV_FILE" >/dev/null
+                echo "${key}=${value}" >> .env
               fi
             }
 
             upsert_env "AUTHGATE_TAG_PROD" "${IMAGE_TAG}"
 
-            cd "$COMPOSE_DIR"
-            sudo docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d caddy
-            sudo docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" --profile prod pull authgate-prod
-            sudo docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" --profile prod up -d authgate-db-prod authgate-prod
-            sudo docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" --profile prod ps
+            docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" up -d caddy
+            docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" --profile prod pull authgate-prod
+            docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" --profile prod up -d authgate-db-prod authgate-prod
+            docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" --profile prod ps
