@@ -1,4 +1,8 @@
+using System.Security.Cryptography;
+using System.Text;
 using AuthGate.Auth.Domain.Common;
+using AuthGate.Auth.Domain.Constants;
+using AuthGate.Auth.Domain.Enums;
 
 namespace AuthGate.Auth.Domain.Entities;
 
@@ -35,9 +39,10 @@ public class UserInvitation : IAuditableEntity
     public string Role { get; set; } = string.Empty;
 
     /// <summary>
-    /// Unique secure token (JWT or GUID)
+    /// Hashed token for secure storage (SHA256)
+    /// The raw token is only sent once to the invitee
     /// </summary>
-    public string Token { get; set; } = string.Empty;
+    public string TokenHash { get; set; } = string.Empty;
 
     /// <summary>
     /// User who created the invitation (inviter)
@@ -77,6 +82,86 @@ public class UserInvitation : IAuditableEntity
     public bool IsExpired() => DateTime.UtcNow > ExpiresAt;
     public bool IsValid() => Status == InvitationStatus.Pending && !IsExpired();
 
+    /// <summary>
+    /// Validates that the role is an allowed invitation role
+    /// </summary>
+    public static bool IsValidRole(string role)
+    {
+        return role == Roles.TenantAdmin ||
+               role == Roles.TenantManager ||
+               role == Roles.TenantUser ||
+               role == Roles.ReadOnly;
+    }
+
+    /// <summary>
+    /// Creates a new invitation with a generated token
+    /// Returns the raw token (to send to invitee) - only available at creation time
+    /// </summary>
+    public static (UserInvitation Invitation, string RawToken) Create(
+        Guid organizationId,
+        string organizationCode,
+        string organizationName,
+        string email,
+        string role,
+        Guid invitedBy,
+        string? message = null,
+        int expirationDays = 7)
+    {
+        if (!IsValidRole(role))
+            throw new ArgumentException($"Invalid role: {role}. Must be one of: TenantAdmin, TenantManager, TenantUser, ReadOnly", nameof(role));
+
+        var id = Guid.NewGuid();
+        var rawToken = GenerateSecureToken();
+        var tokenHash = HashToken(rawToken);
+
+        var invitation = new UserInvitation
+        {
+            Id = id,
+            OrganizationId = organizationId,
+            OrganizationCode = organizationCode,
+            OrganizationName = organizationName,
+            Email = email.ToLowerInvariant().Trim(),
+            Role = role,
+            TokenHash = tokenHash,
+            InvitedBy = invitedBy,
+            Status = InvitationStatus.Pending,
+            ExpiresAt = DateTime.UtcNow.AddDays(expirationDays),
+            Message = message,
+            CreatedAtUtc = DateTime.UtcNow,
+            CreatedBy = invitedBy
+        };
+
+        // Return format: {id}.{token} for URL construction
+        var fullToken = $"{id}.{rawToken}";
+        return (invitation, fullToken);
+    }
+
+    /// <summary>
+    /// Verifies if the provided token matches this invitation
+    /// </summary>
+    public bool VerifyToken(string rawToken)
+    {
+        var hash = HashToken(rawToken);
+        return CryptographicOperations.FixedTimeEquals(
+            Encoding.UTF8.GetBytes(hash),
+            Encoding.UTF8.GetBytes(TokenHash));
+    }
+
+    private static string GenerateSecureToken()
+    {
+        var bytes = new byte[32];
+        using var rng = RandomNumberGenerator.Create();
+        rng.GetBytes(bytes);
+        return Convert.ToBase64String(bytes).Replace("+", "-").Replace("/", "_").TrimEnd('=');
+    }
+
+    private static string HashToken(string token)
+    {
+        var bytes = Encoding.UTF8.GetBytes(token);
+        var hash = SHA256.HashData(bytes);
+        return Convert.ToHexString(hash);
+    }
+
     public void Accept(Guid userId)
     {
         if (!IsValid())
@@ -105,12 +190,4 @@ public class UserInvitation : IAuditableEntity
             UpdatedAtUtc = DateTime.UtcNow;
         }
     }
-}
-
-public enum InvitationStatus
-{
-    Pending,
-    Accepted,
-    Expired,
-    Cancelled
 }

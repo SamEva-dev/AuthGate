@@ -4,6 +4,7 @@ using AuthGate.Auth.Application.Services;
 using AuthGate.Auth.Application.Services.Email;
 using AuthGate.Auth.Domain.Constants;
 using AuthGate.Auth.Domain.Entities;
+using AuthGate.Auth.Domain.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -100,33 +101,24 @@ public class InviteCollaboratorCommandHandler : IRequestHandler<InviteCollaborat
                 return Result.Failure<InviteCollaboratorResponse>("An active invitation already exists for this email");
             }
 
-            // 6. Create invitation
-            var token = Guid.NewGuid().ToString("N"); // Secure random token
-            var expiresAt = DateTime.UtcNow.AddDays(7); // 7 days validity
-
-            var invitation = new UserInvitation
-            {
-                Id = Guid.NewGuid(),
-                OrganizationId = organizationId,
-                OrganizationCode = organizationCode,
-                OrganizationName = organizationName,
-                Email = request.Email,
-                Role = request.Role,
-                Token = token,
-                InvitedBy = inviterId.Value,
-                Status = InvitationStatus.Pending,
-                ExpiresAt = expiresAt,
-                Message = request.Message,
-                CreatedAtUtc = DateTime.UtcNow,
-                CreatedBy = inviterId.Value
-            };
+            // 6. Create invitation using factory method (generates secure token + hash)
+            var (invitation, rawToken) = UserInvitation.Create(
+                organizationId: organizationId,
+                organizationCode: organizationCode,
+                organizationName: organizationName,
+                email: request.Email,
+                role: request.Role,
+                invitedBy: inviterId.Value,
+                message: request.Message,
+                expirationDays: 7
+            );
 
             _context.UserInvitations.Add(invitation);
             await _context.SaveChangesAsync(cancellationToken);
 
-            // 7. Generate invitation URL
+            // 7. Generate invitation URL (rawToken contains {id}.{secret})
             var frontendUrl = _configuration["Frontend:BaseUrl"];
-            var invitationUrl = $"{frontendUrl}/accept-invitation/{token}";
+            var invitationUrl = $"{frontendUrl}/accept-invitation/{rawToken}";
 
             // 8. ✅ Send invitation email
             try
@@ -138,7 +130,7 @@ public class InviteCollaboratorCommandHandler : IRequestHandler<InviteCollaborat
                     organizationName: organizationName,
                     role: request.Role,
                     invitationUrl: invitationUrl,
-                    expiresAt: expiresAt,
+                    expiresAt: invitation.ExpiresAt,
                     cancellationToken: cancellationToken);
 
                 _logger.LogInformation(

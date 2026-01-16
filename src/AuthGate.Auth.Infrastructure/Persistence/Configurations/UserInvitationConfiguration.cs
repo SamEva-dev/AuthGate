@@ -31,9 +31,9 @@ public class UserInvitationConfiguration : IEntityTypeConfiguration<UserInvitati
             .IsRequired()
             .HasMaxLength(50);
         
-        builder.Property(ui => ui.Token)
+        builder.Property(ui => ui.TokenHash)
             .IsRequired()
-            .HasMaxLength(100);
+            .HasMaxLength(128); // SHA256 hex = 64 chars, with margin
         
         builder.Property(ui => ui.Status)
             .IsRequired();
@@ -42,7 +42,7 @@ public class UserInvitationConfiguration : IEntityTypeConfiguration<UserInvitati
             .HasMaxLength(1000);
         
         // Indexes
-        builder.HasIndex(ui => ui.Token)
+        builder.HasIndex(ui => ui.TokenHash)
             .IsUnique();
         
         builder.HasIndex(ui => new { ui.OrganizationId, ui.Email });

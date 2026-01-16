@@ -34,12 +34,28 @@ public class AcceptInvitationCommandHandler : IRequestHandler<AcceptInvitationCo
     {
         try
         {
+            // Token format: {id}.{secret}
+            var tokenParts = request.Token?.Split('.', 2);
+            if (tokenParts == null || tokenParts.Length != 2 || !Guid.TryParse(tokenParts[0], out var invitationId))
+            {
+                return Result.Failure<AcceptInvitationResponse>("Invalid invitation token format");
+            }
+
+            var rawSecret = tokenParts[1];
+
             var invitation = await _context.UserInvitations
-                .FirstOrDefaultAsync(i => i.Token == request.Token, cancellationToken);
+                .FirstOrDefaultAsync(i => i.Id == invitationId, cancellationToken);
 
             if (invitation == null || !invitation.IsValid())
             {
                 return Result.Failure<AcceptInvitationResponse>("Invalid or expired invitation");
+            }
+
+            // Verify token using constant-time comparison
+            if (!invitation.VerifyToken(rawSecret))
+            {
+                _logger.LogWarning("Invalid token provided for invitation {InvitationId}", invitationId);
+                return Result.Failure<AcceptInvitationResponse>("Invalid invitation token");
             }
 
             var existingUser = await _userManager.FindByEmailAsync(invitation.Email);
