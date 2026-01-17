@@ -91,3 +91,25 @@ public class OAuthProviderInfo
     public bool Enabled { get; set; }
     public string? IconUrl { get; set; }
 }
+
+/// <summary>
+/// OAuth configuration for frontend
+/// </summary>
+public class OAuthConfigDto
+{
+    public string? ClientId { get; set; }
+    public string? AppId { get; set; }
+    public string Scope { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Internal model for external user info from OAuth provider
+/// </summary>
+public class ExternalUserInfo
+{
+    public string Email { get; set; } = string.Empty;
+    public string FirstName { get; set; } = string.Empty;
+    public string LastName { get; set; } = string.Empty;
+    public string ProviderId { get; set; } = string.Empty;
+    public string? PictureUrl { get; set; }
+}
