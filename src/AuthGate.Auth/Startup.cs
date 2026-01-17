@@ -269,7 +269,7 @@ public class Startup
 
             endpoints.MapPrometheusScrapingEndpoint("/metrics").RequireAuthorization();
             
-            // Health Check Endpoints (pour Kubernetes/Fly.io)
+            // Health Check Endpoints
             endpoints.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
             {
                 Predicate = _ => true,

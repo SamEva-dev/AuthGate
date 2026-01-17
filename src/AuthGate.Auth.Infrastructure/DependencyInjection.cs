@@ -43,7 +43,7 @@ public static class DependencyInjection
             }
             else
             {
-                // Use DATABASE_URL from Fly.io, or fallback to DefaultConnection_Auth
+                // Use DATABASE_URL environment variable, or fallback to DefaultConnection_Auth
                 var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
                 string connectionString;
                 
@@ -83,7 +83,7 @@ public static class DependencyInjection
             }
             else
             {
-                // Use DATABASE_URL from Fly.io, or fallback to AuditConnection_Auth
+                // Use DATABASE_URL environment variable, or fallback to AuditConnection_Auth
                 var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
                 string connectionString;
                 

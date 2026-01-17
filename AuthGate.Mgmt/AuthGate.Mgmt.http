@@ -1,6 +1,0 @@
-@AuthGate.Mgmt_HostAddress = http://localhost:5063
-
-GET {{AuthGate.Mgmt_HostAddress}}/weatherforecast/
-Accept: application/json
-
-###
