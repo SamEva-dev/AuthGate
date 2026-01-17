@@ -14,6 +14,8 @@
   <ItemGroup>
     <PackageReference Include="CorrelationId" Version="3.0.1" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.10" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.Google" Version="9.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.Facebook" Version="9.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.4" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="9.0.10" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="9.0.10">

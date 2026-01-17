@@ -60,6 +60,21 @@ public class User : IdentityUser<Guid>, IAuditableEntity
     /// </summary>
     public Guid? OrganizationId { get; set; }
 
+    /// <summary>
+    /// Gets or sets the external OAuth provider (google, facebook, etc.)
+    /// </summary>
+    public string? ExternalProvider { get; set; }
+
+    /// <summary>
+    /// Gets or sets the user's ID from the external OAuth provider
+    /// </summary>
+    public string? ExternalProviderId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the user's profile picture URL (from OAuth or uploaded)
+    /// </summary>
+    public string? ProfilePictureUrl { get; set; }
+
     /// <inheritdoc/>
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 
