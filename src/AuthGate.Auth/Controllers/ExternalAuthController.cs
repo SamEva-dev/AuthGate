@@ -1,4 +1,5 @@
 using AuthGate.Auth.Application.DTOs.Auth;
+using Google.Apis.Auth;
 using AuthGate.Auth.Application.Features.Auth.Commands.ExternalLogin;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -12,7 +13,7 @@ namespace AuthGate.Auth.Controllers;
 /// Controller for external OAuth authentication (Google, Facebook)
 /// </summary>
 [ApiController]
-[Route("api/auth/external")]
+[Route("api/external-auth")]
 public class ExternalAuthController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -226,39 +227,46 @@ public class ExternalAuthController : ControllerBase
     {
         try
         {
-            var httpClient = _httpClientFactory.CreateClient();
-            
-            // Verify token with Google's tokeninfo endpoint
-            var response = await httpClient.GetAsync($"https://oauth2.googleapis.com/tokeninfo?id_token={idToken}");
-            
-            if (!response.IsSuccessStatusCode)
+            var expectedClientId = _configuration["OAuth:Google:ClientId"];
+            if (string.IsNullOrWhiteSpace(expectedClientId))
             {
-                _logger.LogWarning("Google token verification failed: {StatusCode}", response.StatusCode);
+                _logger.LogWarning("Google OAuth is not configured (missing OAuth:Google:ClientId)");
                 return null;
             }
 
-            var content = await response.Content.ReadAsStringAsync();
-            var tokenInfo = JsonDocument.Parse(content);
-            var root = tokenInfo.RootElement;
-
-            // Verify audience (client ID)
-            var expectedClientId = _configuration["OAuth:Google:ClientId"];
-            var audience = root.TryGetProperty("aud", out var audProp) ? audProp.GetString() : null;
-            
-            if (audience != expectedClientId)
+            // Validate JWT signature + expiry locally (no outbound HTTP call)
+            var settings = new GoogleJsonWebSignature.ValidationSettings
             {
-                _logger.LogWarning("Google token audience mismatch: expected {Expected}, got {Actual}", expectedClientId, audience);
+                Audience = new[] { expectedClientId }
+            };
+
+            var payload = await GoogleJsonWebSignature.ValidateAsync(idToken, settings);
+
+            if (payload.EmailVerified != true)
+            {
+                _logger.LogWarning("Google email not verified for subject {Sub}", payload.Subject);
+                return null;
+            }
+
+            if (string.IsNullOrWhiteSpace(payload.Email))
+            {
+                _logger.LogWarning("Google token does not contain an email claim");
                 return null;
             }
 
             return new ExternalUserInfo
             {
-                Email = root.TryGetProperty("email", out var emailProp) ? emailProp.GetString() ?? "" : "",
-                FirstName = root.TryGetProperty("given_name", out var givenNameProp) ? givenNameProp.GetString() ?? "" : "",
-                LastName = root.TryGetProperty("family_name", out var familyNameProp) ? familyNameProp.GetString() ?? "" : "",
-                ProviderId = root.TryGetProperty("sub", out var subProp) ? subProp.GetString() ?? "" : "",
-                PictureUrl = root.TryGetProperty("picture", out var pictureProp) ? pictureProp.GetString() : null
+                Email = payload.Email ?? string.Empty,
+                FirstName = payload.GivenName ?? string.Empty,
+                LastName = payload.FamilyName ?? string.Empty,
+                ProviderId = payload.Subject ?? string.Empty,
+                PictureUrl = payload.Picture
             };
+        }
+        catch (InvalidJwtException ex)
+        {
+            _logger.LogWarning(ex, "Invalid Google ID token");
+            return null;
         }
         catch (Exception ex)
         {
@@ -271,44 +279,97 @@ public class ExternalAuthController : ControllerBase
     {
         try
         {
-            var httpClient = _httpClientFactory.CreateClient();
-            
-            // Get user info from Facebook Graph API
-            var response = await httpClient.GetAsync(
-                $"https://graph.facebook.com/me?fields=id,email,first_name,last_name,picture.type(large)&access_token={accessToken}");
-            
+            var appId = _configuration["OAuth:Facebook:AppId"];
+            var appSecret = _configuration["OAuth:Facebook:AppSecret"];
+
+            // 1) Validate the token is valid and issued for *our* app (debug_token)
+            if (!string.IsNullOrWhiteSpace(appId) && !string.IsNullOrWhiteSpace(appSecret))
+            {
+                var appAccessToken = $"{appId}|{appSecret}";
+                var debugUrl = $"https://graph.facebook.com/debug_token?input_token={Uri.EscapeDataString(accessToken)}&access_token={Uri.EscapeDataString(appAccessToken)}";
+
+                using var debugResponse = await _httpClient.GetAsync(debugUrl);
+                if (!debugResponse.IsSuccessStatusCode)
+                {
+                    _logger.LogWarning("Facebook debug_token failed with status {Status}", debugResponse.StatusCode);
+                    return null;
+                }
+
+                var debugContent = await debugResponse.Content.ReadAsStringAsync();
+                using var debugDoc = JsonDocument.Parse(debugContent);
+
+                if (!debugDoc.RootElement.TryGetProperty("data", out var dataEl))
+                {
+                    _logger.LogWarning("Facebook debug_token response missing 'data'");
+                    return null;
+                }
+
+                var isValid = dataEl.TryGetProperty("is_valid", out var isValidEl) && isValidEl.ValueKind == JsonValueKind.True;
+                if (!isValid)
+                {
+                    _logger.LogWarning("Facebook token is not valid");
+                    return null;
+                }
+
+                if (dataEl.TryGetProperty("app_id", out var appIdEl))
+                {
+                    var tokenAppId = appIdEl.GetString();
+                    if (!string.Equals(tokenAppId, appId, StringComparison.Ordinal))
+                    {
+                        _logger.LogWarning("Facebook token app_id mismatch. Expected {Expected}, got {Actual}", appId, tokenAppId);
+                        return null;
+                    }
+                }
+            }
+            else
+            {
+                _logger.LogWarning("Facebook OAuth is not fully configured (missing OAuth:Facebook:AppId/AppSecret). Proceeding without debug_token validation.");
+            }
+
+            // 2) Fetch user profile
+            var url = $"https://graph.facebook.com/me?fields=id,email,first_name,last_name,picture.type(large)&access_token={Uri.EscapeDataString(accessToken)}";
+            using var response = await _httpClient.GetAsync(url);
+
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("Facebook token verification failed: {StatusCode}", response.StatusCode);
+                _logger.LogWarning("Facebook API call failed with status {Status}", response.StatusCode);
                 return null;
             }
 
             var content = await response.Content.ReadAsStringAsync();
-            var userInfo = JsonDocument.Parse(content);
-            var root = userInfo.RootElement;
+            using var doc = JsonDocument.Parse(content);
 
-            // Check if we got an email (required for our system)
-            var email = root.TryGetProperty("email", out var emailProp) ? emailProp.GetString() : null;
-            if (string.IsNullOrEmpty(email))
+            if (!doc.RootElement.TryGetProperty("email", out var emailEl))
             {
-                _logger.LogWarning("Facebook user did not grant email permission");
+                _logger.LogWarning("Facebook response does not contain email");
                 return null;
             }
 
-            string? pictureUrl = null;
-            if (root.TryGetProperty("picture", out var pictureProp) && 
-                pictureProp.TryGetProperty("data", out var dataProp) &&
-                dataProp.TryGetProperty("url", out var urlProp))
+            var email = emailEl.GetString();
+            if (string.IsNullOrWhiteSpace(email))
             {
-                pictureUrl = urlProp.GetString();
+                _logger.LogWarning("Facebook email is empty");
+                return null;
+            }
+
+            var id = doc.RootElement.GetProperty("id").GetString() ?? string.Empty;
+            var firstName = doc.RootElement.GetProperty("first_name").GetString() ?? string.Empty;
+            var lastName = doc.RootElement.GetProperty("last_name").GetString() ?? string.Empty;
+
+            string? pictureUrl = null;
+            if (doc.RootElement.TryGetProperty("picture", out var pictureEl) &&
+                pictureEl.TryGetProperty("data", out var pictureDataEl) &&
+                pictureDataEl.TryGetProperty("url", out var pictureUrlEl))
+            {
+                pictureUrl = pictureUrlEl.GetString();
             }
 
             return new ExternalUserInfo
             {
                 Email = email,
-                FirstName = root.TryGetProperty("first_name", out var firstNameProp) ? firstNameProp.GetString() ?? "" : "",
-                LastName = root.TryGetProperty("last_name", out var lastNameProp) ? lastNameProp.GetString() ?? "" : "",
-                ProviderId = root.TryGetProperty("id", out var idProp) ? idProp.GetString() ?? "" : "",
+                FirstName = firstName,
+                LastName = lastName,
+                ProviderId = id,
                 PictureUrl = pictureUrl
             };
         }
@@ -319,14 +380,4 @@ public class ExternalAuthController : ControllerBase
         }
     }
 
-    private class ExternalUserInfo
-    {
-        public string Email { get; set; } = "";
-        public string FirstName { get; set; } = "";
-        public string LastName { get; set; } = "";
-        public string ProviderId { get; set; } = "";
-        public string? PictureUrl { get; set; }
-    }
-
-    #endregion
 }

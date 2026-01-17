@@ -269,7 +269,6 @@ public class Startup
 
             endpoints.MapPrometheusScrapingEndpoint("/metrics").RequireAuthorization();
             
-            // Health Check Endpoints
             endpoints.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
             {
                 Predicate = _ => true,
