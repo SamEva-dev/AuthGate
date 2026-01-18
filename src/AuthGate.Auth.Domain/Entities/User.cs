@@ -81,6 +81,11 @@ public class User : IdentityUser<Guid>, IAuditableEntity
     /// <inheritdoc/>
     public DateTime? UpdatedAtUtc { get; set; }
 
+    /// <summary>
+    /// Gets or sets the date when the account was deactivated (soft delete)
+    /// </summary>
+    public DateTime? DeactivatedAtUtc { get; set; }
+
     /// <inheritdoc/>
     public Guid? CreatedBy { get; set; }
 

@@ -51,10 +51,49 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
         
         try
         {
-            // 1. Validate user doesn't already exist
+            // 1. Check if user already exists
             var existingUser = await _userManager.FindByEmailAsync(request.Email);
             if (existingUser != null)
             {
+                // Check if account was deactivated (soft deleted)
+                if (!existingUser.IsActive && existingUser.DeactivatedAtUtc.HasValue)
+                {
+                    // Reactivate the account
+                    _logger.LogInformation("Reactivating previously deactivated account for {Email}", request.Email);
+                    
+                    existingUser.IsActive = true;
+                    existingUser.DeactivatedAtUtc = null;
+                    existingUser.Status = UserStatus.Active;
+                    existingUser.UpdatedAtUtc = DateTime.UtcNow;
+                    
+                    // Update password if provided
+                    if (!string.IsNullOrEmpty(request.Password))
+                    {
+                        var resetToken = await _userManager.GeneratePasswordResetTokenAsync(existingUser);
+                        await _userManager.ResetPasswordAsync(existingUser, resetToken, request.Password);
+                    }
+                    
+                    await _userManager.UpdateAsync(existingUser);
+                    
+                    // Generate tokens for returning user
+                    var userRoles = await _userManager.GetRolesAsync(existingUser);
+                    var tokens = await _tokenService.GenerateTokensAsync(existingUser);
+                    
+                    return Result<RegisterWithTenantResponse>.Success(new RegisterWithTenantResponse
+                    {
+                        UserId = existingUser.Id,
+                        Email = existingUser.Email!,
+                        OrganizationId = existingUser.OrganizationId,
+                        OrganizationCode = null,
+                        OrganizationName = request.OrganizationName,
+                        AccessToken = tokens.AccessToken,
+                        RefreshToken = tokens.RefreshToken,
+                        Role = userRoles.FirstOrDefault() ?? AuthGate.Auth.Domain.Constants.Roles.TenantOwner,
+                        Status = "reactivated",
+                        Message = $"Heureux de vous revoir, {existingUser.FirstName ?? ""}! Votre compte a été réactivé."
+                    });
+                }
+                
                 return Result.Failure<RegisterWithTenantResponse>($"User with email '{request.Email}' already exists");
             }
 

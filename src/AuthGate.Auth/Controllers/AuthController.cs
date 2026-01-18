@@ -327,4 +327,66 @@ public class AuthController : ControllerBase
         _logger.LogInformation("Invitation accepted by {Email}", result.Value.Email);
         return Ok(result.Value);
     }
+
+    /// <summary>
+    /// Change password for authenticated user
+    /// </summary>
+    [HttpPost("change-password")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordDto dto)
+    {
+        var userId = User.FindFirstValue("sub") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Unauthorized();
+        }
+
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user == null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _userManager.ChangePasswordAsync(user, dto.CurrentPassword, dto.NewPassword);
+        if (!result.Succeeded)
+        {
+            var errors = string.Join(", ", result.Errors.Select(e => e.Description));
+            return BadRequest(new { error = errors });
+        }
+
+        _logger.LogInformation("Password changed for user {UserId}", userId);
+        return Ok(new { message = "Password changed successfully" });
+    }
+
+    /// <summary>
+    /// Deactivate (soft delete) the current user account
+    /// </summary>
+    [HttpPost("deactivate")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> DeactivateAccount()
+    {
+        var userId = User.FindFirstValue("sub") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Unauthorized();
+        }
+
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user == null)
+        {
+            return Unauthorized();
+        }
+
+        user.IsActive = false;
+        user.DeactivatedAtUtc = DateTime.UtcNow;
+        await _userManager.UpdateAsync(user);
+
+        _logger.LogInformation("Account deactivated for user {UserId}", userId);
+        return Ok(new { message = "Account deactivated successfully" });
+    }
 }
