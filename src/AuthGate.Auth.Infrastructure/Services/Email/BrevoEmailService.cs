@@ -2,27 +2,31 @@ using AuthGate.Auth.Application.Services.Email;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Net;
+using System.Net.Http.Json;
 using System.Net.Mail;
 
 namespace AuthGate.Auth.Infrastructure.Services.Email;
 
-/// <summary>
-/// SMTP email service implementation
-/// </summary>
-public class SmtpEmailService : IEmailService
+public sealed class BrevoEmailService : IEmailService
 {
     private readonly EmailSettings _settings;
-    private readonly ILogger<SmtpEmailService> _logger;
+    private readonly BrevoSettings _brevo;
+    private readonly ILogger<BrevoEmailService> _logger;
+    private readonly IHttpClientFactory _httpClientFactory;
 
-    public SmtpEmailService(
+    public BrevoEmailService(
         IOptions<EmailSettings> settings,
-        ILogger<SmtpEmailService> logger)
+        IOptions<BrevoSettings> brevoSettings,
+        ILogger<BrevoEmailService> logger,
+        IHttpClientFactory httpClientFactory)
     {
         _settings = settings.Value;
+        _brevo = brevoSettings.Value;
         _logger = logger;
+        _httpClientFactory = httpClientFactory;
     }
 
-    public async Task SendInvitationEmailAsync(
+    public Task SendInvitationEmailAsync(
         string toEmail,
         string toName,
         string inviterName,
@@ -33,7 +37,7 @@ public class SmtpEmailService : IEmailService
         CancellationToken cancellationToken = default)
     {
         var subject = $"Invitation à rejoindre {organizationName} sur LocaGuest";
-        
+
         var htmlBody = $@"
 <!DOCTYPE html>
 <html>
@@ -104,17 +108,17 @@ Si vous n'avez pas demandé cette invitation, vous pouvez ignorer cet email en t
 © 2025 LocaGuest. Tous droits réservés.
 ";
 
-        await SendEmailAsync(toEmail, subject, htmlBody, textBody, cancellationToken);
+        return SendEmailAsync(toEmail, subject, htmlBody, textBody, cancellationToken);
     }
 
-    public async Task SendWelcomeEmailAsync(
+    public Task SendWelcomeEmailAsync(
         string toEmail,
         string firstName,
         string organizationName,
         CancellationToken cancellationToken = default)
     {
         var subject = "Bienvenue sur LocaGuest! 🎉";
-        
+
         var htmlBody = $@"
 <!DOCTYPE html>
 <html>
@@ -169,10 +173,10 @@ Si vous n'avez pas demandé cette invitation, vous pouvez ignorer cet email en t
 </body>
 </html>";
 
-        await SendEmailAsync(toEmail, subject, htmlBody, null, cancellationToken);
+        return SendEmailAsync(toEmail, subject, htmlBody, null, cancellationToken);
     }
 
-    public async Task SendPasswordResetEmailAsync(
+    public Task SendPasswordResetEmailAsync(
         string toEmail,
         string firstName,
         string resetUrl,
@@ -180,7 +184,7 @@ Si vous n'avez pas demandé cette invitation, vous pouvez ignorer cet email en t
         CancellationToken cancellationToken = default)
     {
         var subject = "Réinitialisation de votre mot de passe LocaGuest";
-        
+
         var htmlBody = $@"
 <!DOCTYPE html>
 <html>
@@ -224,17 +228,17 @@ Si vous n'avez pas demandé cette invitation, vous pouvez ignorer cet email en t
 </body>
 </html>";
 
-        await SendEmailAsync(toEmail, subject, htmlBody, null, cancellationToken);
+        return SendEmailAsync(toEmail, subject, htmlBody, null, cancellationToken);
     }
 
-    public async Task SendEmailVerificationAsync(
+    public Task SendEmailVerificationAsync(
         string toEmail,
         string firstName,
         string verificationUrl,
         CancellationToken cancellationToken = default)
     {
         var subject = "Vérifiez votre adresse email";
-        
+
         var htmlBody = $@"
 <!DOCTYPE html>
 <html>
@@ -270,7 +274,7 @@ Si vous n'avez pas demandé cette invitation, vous pouvez ignorer cet email en t
 </body>
 </html>";
 
-        await SendEmailAsync(toEmail, subject, htmlBody, null, cancellationToken);
+        return SendEmailAsync(toEmail, subject, htmlBody, null, cancellationToken);
     }
 
     public async Task SendEmailAsync(
@@ -285,49 +289,126 @@ Si vous n'avez pas demandé cette invitation, vous pouvez ignorer cet email en t
             _logger.LogInformation(
                 "Email sending disabled. Would send to {Email}: {Subject}",
                 toEmail, subject);
-            _logger.LogDebug("Email body (first 200 chars): {Body}", 
+            _logger.LogDebug(
+                "Email body (first 200 chars): {Body}",
                 htmlBody.Length > 200 ? htmlBody[..200] + "..." : htmlBody);
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(_settings.SmtpHost))
+        var mode = (_brevo.Mode ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(mode))
+            mode = "BREVO_API";
+
+        if (string.Equals(mode, "BREVO_SMTP", StringComparison.OrdinalIgnoreCase))
         {
-            _logger.LogError("EmailSettings:SmtpHost is missing. Cannot send email to {Email}.", toEmail);
+            await SendViaSmtpAsync(toEmail, subject, htmlBody, textBody, cancellationToken);
             return;
         }
 
-        try
+        await SendViaApiAsync(toEmail, subject, htmlBody, textBody, cancellationToken);
+    }
+
+    private async Task SendViaApiAsync(
+        string toEmail,
+        string subject,
+        string htmlBody,
+        string? textBody,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(_brevo.ApiKey))
+            throw new InvalidOperationException("Brevo:ApiKey is required when EmailSettings:Provider=Brevo and Brevo:Mode=BREVO_API");
+
+        var client = _httpClientFactory.CreateClient("BrevoEmail");
+
+        using var req = new HttpRequestMessage(HttpMethod.Post, "smtp/email");
+        req.Headers.TryAddWithoutValidation("api-key", _brevo.ApiKey);
+
+        var senderEmail = !string.IsNullOrWhiteSpace(_brevo.SenderEmail) ? _brevo.SenderEmail : _settings.FromEmail;
+        var senderName = !string.IsNullOrWhiteSpace(_brevo.SenderName) ? _brevo.SenderName : _settings.FromName;
+
+        var payload = new BrevoSendEmailRequest
         {
-            using var message = new MailMessage
-            {
-                From = new MailAddress(_settings.FromEmail, _settings.FromName),
-                Subject = subject,
-                Body = htmlBody,
-                IsBodyHtml = true
-            };
+            Sender = new BrevoSender { Email = senderEmail, Name = senderName },
+            To = new List<BrevoRecipient> { new() { Email = toEmail } },
+            Subject = subject,
+            HtmlContent = htmlBody,
+            TextContent = textBody,
+        };
 
-            message.To.Add(new MailAddress(toEmail));
-
-            if (!string.IsNullOrEmpty(textBody))
-            {
-                message.AlternateViews.Add(
-                    AlternateView.CreateAlternateViewFromString(textBody, null, "text/plain"));
-            }
-
-            using var smtpClient = new SmtpClient(_settings.SmtpHost, _settings.SmtpPort)
-            {
-                EnableSsl = _settings.SmtpUseSsl,
-                Credentials = new NetworkCredential(_settings.SmtpUsername, _settings.SmtpPassword)
-            };
-
-            await smtpClient.SendMailAsync(message, cancellationToken);
-
-            _logger.LogInformation("Email sent successfully to {Email}: {Subject}", toEmail, subject);
-        }
-        catch (Exception ex)
+        if (_brevo.Sandbox)
         {
-            _logger.LogError(ex, "Failed to send email to {Email}: {Subject}", toEmail, subject);
-            throw;
+            payload.Tags.Add("sandbox");
         }
+
+        req.Content = JsonContent.Create(payload);
+
+        using var resp = await client.SendAsync(req, cancellationToken);
+        if (!resp.IsSuccessStatusCode)
+        {
+            var err = await resp.Content.ReadAsStringAsync(cancellationToken);
+            throw new InvalidOperationException($"Brevo API error ({(int)resp.StatusCode}): {err}");
+        }
+
+        _logger.LogInformation("Email sent successfully via Brevo API to {Email}: {Subject}", toEmail, subject);
+    }
+
+    private async Task SendViaSmtpAsync(
+        string toEmail,
+        string subject,
+        string htmlBody,
+        string? textBody,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(_brevo.SmtpUsername) || string.IsNullOrWhiteSpace(_brevo.SmtpPassword))
+            throw new InvalidOperationException("Brevo SMTP credentials are required when Brevo:Mode=BREVO_SMTP");
+
+        using var message = new MailMessage
+        {
+            From = new MailAddress(
+                !string.IsNullOrWhiteSpace(_brevo.SenderEmail) ? _brevo.SenderEmail : _settings.FromEmail,
+                !string.IsNullOrWhiteSpace(_brevo.SenderName) ? _brevo.SenderName : _settings.FromName),
+            Subject = subject,
+            Body = htmlBody,
+            IsBodyHtml = true
+        };
+
+        message.To.Add(new MailAddress(toEmail));
+
+        if (!string.IsNullOrEmpty(textBody))
+        {
+            message.AlternateViews.Add(
+                AlternateView.CreateAlternateViewFromString(textBody, null, "text/plain"));
+        }
+
+        using var smtpClient = new SmtpClient(_brevo.SmtpHost, _brevo.SmtpPort)
+        {
+            EnableSsl = _brevo.SmtpUseTls,
+            Credentials = new NetworkCredential(_brevo.SmtpUsername, _brevo.SmtpPassword)
+        };
+
+        await smtpClient.SendMailAsync(message, cancellationToken);
+
+        _logger.LogInformation("Email sent successfully via Brevo SMTP to {Email}: {Subject}", toEmail, subject);
+    }
+
+    private sealed class BrevoSendEmailRequest
+    {
+        public BrevoSender Sender { get; set; } = new();
+        public List<BrevoRecipient> To { get; set; } = new();
+        public string Subject { get; set; } = string.Empty;
+        public string? HtmlContent { get; set; }
+        public string? TextContent { get; set; }
+        public List<string> Tags { get; set; } = new();
+    }
+
+    private sealed class BrevoSender
+    {
+        public string Email { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+    }
+
+    private sealed class BrevoRecipient
+    {
+        public string Email { get; set; } = string.Empty;
     }
 }

@@ -7,7 +7,7 @@ public class EmailSettings
     /// <summary>
     /// Email provider: SMTP or SendGrid
     /// </summary>
-    public string Provider { get; set; } = "SMTP";
+    public string Provider { get; set; } = "Brevo";
 
     /// <summary>
     /// Sender email address

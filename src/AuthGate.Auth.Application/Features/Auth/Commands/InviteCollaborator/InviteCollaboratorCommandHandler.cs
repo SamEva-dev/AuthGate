@@ -61,7 +61,9 @@ public class InviteCollaboratorCommandHandler : IRequestHandler<InviteCollaborat
             }
 
             var inviterRoles = await _userManager.GetRolesAsync(inviter);
-            if (!inviterRoles.Contains(Domain.Constants.Roles.TenantOwner) && !inviterRoles.Contains(Domain.Constants.Roles.TenantAdmin))
+            if (!inviterRoles.Contains(Domain.Constants.Roles.TenantOwner) &&
+                !inviterRoles.Contains(Domain.Constants.Roles.TenantAdmin) &&
+                !inviterRoles.Contains(Domain.Constants.Roles.SuperAdmin))
             {
                 return Result.Failure<InviteCollaboratorResponse>("Only TenantOwner or TenantAdmin can invite users");
             }
@@ -77,7 +79,11 @@ public class InviteCollaboratorCommandHandler : IRequestHandler<InviteCollaborat
             var organizationName = _organizationContext.OrganizationName ?? "Unknown Organization";
 
             // 3. Validate role
-            var allowedRoles = new[] { Domain.Constants.Roles.TenantAdmin, Domain.Constants.Roles.TenantManager, Domain.Constants.Roles.TenantUser, Domain.Constants.Roles.ReadOnly };
+            var allowedRoles = new[] { Domain.Constants.Roles.TenantAdmin,
+                Domain.Constants.Roles.TenantManager,
+                Domain.Constants.Roles.SuperAdmin,
+                Domain.Constants.Roles.TenantUser, 
+                Domain.Constants.Roles.ReadOnly };
             if (!allowedRoles.Contains(request.Role))
             {
                 return Result.Failure<InviteCollaboratorResponse>(

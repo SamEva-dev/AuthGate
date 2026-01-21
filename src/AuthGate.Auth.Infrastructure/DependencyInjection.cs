@@ -129,8 +129,34 @@ public static class DependencyInjection
         services.AddScoped<ITotpService, TotpService>();
         services.AddScoped<ITwoFactorService, TwoFactorService>();
         services.AddScoped<IDeviceFingerprintService, DeviceFingerprintService>();
-        services.AddScoped<IEmailService, SmtpEmailService>();
         services.Configure<EmailSettings>(configuration.GetSection(EmailSettings.SectionName));
+        services.Configure<AuthGate.Auth.Infrastructure.Services.Email.BrevoSettings>(configuration.GetSection("Brevo"));
+
+        services.AddHttpClient("BrevoEmail")
+            .ConfigureHttpClient((sp, c) =>
+            {
+                var brevo = sp.GetRequiredService<IOptions<AuthGate.Auth.Infrastructure.Services.Email.BrevoSettings>>().Value;
+                var baseUrl = string.IsNullOrWhiteSpace(brevo.ApiBaseUrl) ? "https://api.brevo.com" : brevo.ApiBaseUrl.TrimEnd('/');
+                c.BaseAddress = new Uri($"{baseUrl}/v3/");
+                c.Timeout = TimeSpan.FromSeconds(30);
+            });
+
+        services.AddScoped<SmtpEmailService>();
+        services.AddScoped<BrevoEmailService>();
+        services.AddScoped<IEmailService>(sp =>
+        {
+            var settings = sp.GetRequiredService<IOptions<EmailSettings>>().Value;
+            var providerName = settings.Provider?.Trim();
+            if (string.IsNullOrWhiteSpace(providerName))
+                providerName = "Brevo";
+
+            return providerName.ToLowerInvariant() switch
+            {
+                "brevo" => sp.GetRequiredService<BrevoEmailService>(),
+                "smtp" => sp.GetRequiredService<SmtpEmailService>(),
+                _ => throw new InvalidOperationException($"Unknown EmailSettings:Provider '{settings.Provider}'. Allowed: Smtp, Brevo")
+            };
+        });
         services.AddScoped<IAuditService, AuditService>();
         services.AddScoped<IUserRoleService, UserRoleService>();
         services.AddScoped<Application.Common.Interfaces.IHttpContextAccessor, HttpContextAccessorService>();
