@@ -21,7 +21,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AuthGate.Auth.Domain\AuthGate.Auth.Domain.csproj" />
-    <ProjectReference Include="..\..\..\LocaGuest.Emailing\src\LocaGuest.Emailing\LocaGuest.Emailing.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="LocaGuest.Emailing" Version="1.0.0" />
   </ItemGroup>
 
 </Project>
