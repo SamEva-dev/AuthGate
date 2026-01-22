@@ -1,4 +1,5 @@
 using AuthGate.Auth.Infrastructure.Persistence;
+using LocaGuest.Emailing.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -25,6 +26,12 @@ public static class MigrationManager
             Log.Information("Applying Audit database migrations...");
                 auditDb.Database.Migrate();
             Log.Information("✅ Audit database migrated successfully.");
+
+            // Apply EmailingDbContext migrations
+            var emailingDb = scope.ServiceProvider.GetRequiredService<EmailingDbContext>();
+            Log.Information("Applying Emailing database migrations...");
+            emailingDb.Database.Migrate();
+            Log.Information("✅ Emailing database migrated successfully.");
         }
         catch (Exception ex)
         {
@@ -52,6 +59,12 @@ public static class MigrationManager
             Log.Information("Applying Audit database migrations...");
             await auditDb.Database.MigrateAsync();
             Log.Information("✅ Audit database migrated successfully.");
+
+            // Apply EmailingDbContext migrations
+            var emailingDb = scope.ServiceProvider.GetRequiredService<EmailingDbContext>();
+            Log.Information("Applying Emailing database migrations...");
+            await emailingDb.Database.MigrateAsync();
+            Log.Information("✅ Emailing database migrated successfully.");
         }
         catch (Exception ex)
         {

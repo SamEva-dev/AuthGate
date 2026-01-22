@@ -6,6 +6,7 @@ using AuthGate.Auth.Application.Features.Auth.Commands.AcceptLocaGuestInvitation
 using AuthGate.Auth.Application.Features.Auth.Commands.RefreshToken;
 using AuthGate.Auth.Application.Features.Auth.Commands.Register;
 using AuthGate.Auth.Application.Features.Auth.Commands.RegisterWithTenant;
+using AuthGate.Auth.Application.Features.Auth.Commands.ValidateEmail;
 using AuthGate.Auth.Application.Features.Auth.Commands.Verify2FA;
 using AuthGate.Auth.Application.Features.Auth.Commands.VerifyRecoveryCode;
 using AuthGate.Auth.Domain.Entities;
@@ -128,6 +129,21 @@ public class AuthController : ControllerBase
         }
 
         return Ok(result.Value);
+    }
+
+    [HttpPost("validate-email")]
+    [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ValidateEmail([FromBody] ValidateEmailCommand command)
+    {
+        var result = await _mediator.Send(command);
+        if (result.IsFailure)
+        {
+            return BadRequest(new { error = result.Error });
+        }
+
+        return Ok(new { success = true });
     }
 
     /// <summary>

@@ -20,6 +20,8 @@ using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Options;
 using AuthGate.Auth.Application.Common.Security;
 using AuthGate.Auth.Infrastructure.Security;
+using LocaGuest.Emailing.Registration;
+using LocaGuest.Emailing.Workers;
 
 namespace AuthGate.Auth.Infrastructure;
 
@@ -64,6 +66,31 @@ public static class DependencyInjection
                     b => b.MigrationsAssembly(typeof(AuthDbContext).Assembly.FullName));
             }
         });
+
+        if (provider != "inmemory")
+        {
+            // LocaGuest.Emailing (queue + worker) - uses same Postgres DB as AuthGate
+            services.AddLocaGuestEmailing(configuration, db =>
+            {
+                var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
+                string connectionString;
+
+                if (!string.IsNullOrEmpty(databaseUrl))
+                {
+                    // Parse DATABASE_URL manually to avoid malformed sslmode parameter
+                    var uri = new Uri(databaseUrl.Split('?')[0]); // Remove query params
+                    var userInfo = uri.UserInfo.Split(':');
+                    connectionString = $"Host={uri.Host};Port={uri.Port};Database={uri.AbsolutePath.TrimStart('/')};Username={userInfo[0]};Password={userInfo[1]};SSL Mode=Disable";
+                }
+                else
+                {
+                    connectionString = configuration.GetConnectionString("DefaultConnection_Auth");
+                }
+
+                db.UsePostgres(connectionString, migrationsAssembly: typeof(DependencyInjection).Assembly.FullName);
+            });
+            services.AddHostedService<EmailDispatcherWorker>();
+        }
         
         // Register AuthDbContext as DbContext for handler injection
         services.AddScoped<DbContext>(provider => provider.GetRequiredService<AuthDbContext>());

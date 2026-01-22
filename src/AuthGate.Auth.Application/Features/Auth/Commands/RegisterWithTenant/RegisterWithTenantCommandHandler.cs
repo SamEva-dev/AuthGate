@@ -2,6 +2,7 @@ using System.Text.Json;
 using AuthGate.Auth.Application.Common;
 using AuthGate.Auth.Application.Common.Interfaces;
 using AuthGate.Auth.Application.Services;
+using AuthGate.Auth.Application.Services.Email;
 using AuthGate.Auth.Domain.Constants;
 using Roles = AuthGate.Auth.Domain.Constants.Roles;
 using AuthGate.Auth.Domain.Entities;
@@ -9,6 +10,7 @@ using AuthGate.Auth.Domain.Enums;
 using AuthGate.Auth.Domain.Repositories;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace AuthGate.Auth.Application.Features.Auth.Commands.RegisterWithTenant;
@@ -27,6 +29,8 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
     private readonly ITokenService _tokenService;
     private readonly IOutboxRepository _outboxRepository;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IEmailService _emailService;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<RegisterWithTenantCommandHandler> _logger;
 
     public RegisterWithTenantCommandHandler(
@@ -34,12 +38,16 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
         ITokenService tokenService,
         IOutboxRepository outboxRepository,
         IUnitOfWork unitOfWork,
+        IEmailService emailService,
+        IConfiguration configuration,
         ILogger<RegisterWithTenantCommandHandler> logger)
     {
         _userManager = userManager;
         _tokenService = tokenService;
         _outboxRepository = outboxRepository;
         _unitOfWork = unitOfWork;
+        _emailService = emailService;
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -105,7 +113,7 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
                 Id = userId,
                 UserName = request.Email,
                 Email = request.Email,
-                EmailConfirmed = true,
+                EmailConfirmed = false,
                 FirstName = request.FirstName,
                 LastName = request.LastName,
                 OrganizationId = null, // Will be set after async provisioning
@@ -117,7 +125,7 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
 
             var createResult = await _userManager.CreateAsync(user, request.Password);
             
-            if (createResult.Succeeded)
+            if (!createResult.Succeeded)
             {
                 var errors = string.Join(", ", createResult.Errors.Select(e => e.Description));
                 _logger.LogError("Failed to create user: {Errors}", errors);
@@ -141,6 +149,16 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
 
             // 4. Generate JWT BEFORE saving outbox (use pending provisioning tokens)
             var (accessToken, refreshToken) = await _tokenService.GeneratePendingProvisioningTokensAsync(user);
+
+            // 4b. Send email verification link
+            var confirmToken = await _userManager.GenerateEmailConfirmationTokenAsync(user);
+            var frontendUrl = _configuration["Frontend:ConfirmEmailUrl"] ?? "http://localhost:4200/confirm-email";
+            var verifyUrl = $"{frontendUrl}?token={Uri.EscapeDataString(confirmToken)}&email={Uri.EscapeDataString(user.Email!)}";
+            await _emailService.SendEmailVerificationAsync(
+                user.Email!,
+                user.FirstName ?? string.Empty,
+                verifyUrl,
+                cancellationToken);
 
             // 5. Create OutboxMessage for async organization provisioning
             var payload = new ProvisionOrganizationPayload

@@ -67,6 +67,12 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<LoginRes
                 return Result.Failure<LoginResponseDto>("Account is inactive");
             }
 
+            if (!user.EmailConfirmed)
+            {
+                _logger.LogWarning("Login attempt for unverified email: {Email}", request.Email);
+                return Result.Failure<LoginResponseDto>("Email not verified");
+            }
+
             // Use SignInManager to check password and handle lockout automatically
             var result = await _signInManager.CheckPasswordSignInAsync(user, request.Password, lockoutOnFailure: true);
 
