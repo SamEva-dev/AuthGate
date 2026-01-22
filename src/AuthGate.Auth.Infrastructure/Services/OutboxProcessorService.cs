@@ -7,6 +7,7 @@ using AuthGate.Auth.Domain.Enums;
 using AuthGate.Auth.Domain.Repositories;
 using AuthGate.Auth.Infrastructure.Options;
 using AuthGate.Auth.Infrastructure.Persistence;
+using LocaGuest.Emailing.Abstractions;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -136,6 +137,8 @@ public class OutboxProcessorService : BackgroundService
         var provisioningClient = serviceProvider.GetRequiredService<ILocaGuestProvisioningClient>();
         var userManager = serviceProvider.GetRequiredService<UserManager<User>>();
         var dbContext = serviceProvider.GetRequiredService<AuthDbContext>();
+        var configuration = serviceProvider.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>();
+        var emailing = serviceProvider.GetRequiredService<IEmailingService>();
 
         // 1. Call LocaGuest API to create Organization
         var orgRequest = new ProvisionOrganizationRequest
@@ -179,6 +182,29 @@ public class OutboxProcessorService : BackgroundService
         _logger.LogInformation(
             "User {UserId} activated with organization {OrganizationId}",
             user.Id, provisioned.OrganizationId);
+
+        var confirmToken = await userManager.GenerateEmailConfirmationTokenAsync(user);
+        var frontendUrl = configuration["Frontend:ConfirmEmailUrl"] ?? "http://localhost:4200/confirm-email";
+        var verifyUrl = $"{frontendUrl}?token={Uri.EscapeDataString(confirmToken)}&email={Uri.EscapeDataString(user.Email!)}";
+
+        var firstName = user.FirstName ?? string.Empty;
+        var subject = "Vérifiez votre adresse email";
+        var htmlBody = $$"""
+<h2>✉️ Vérification d'email</h2>
+<p>Bonjour {{firstName}},</p>
+<p>Pour finaliser votre inscription, veuillez vérifier votre adresse email en cliquant sur le bouton ci-dessous :</p>
+<p><a href="{{verifyUrl}}">Vérifier mon email</a></p>
+<p>Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.</p>
+""";
+
+        await emailing.QueueHtmlAsync(
+            toEmail: user.Email!,
+            subject: subject,
+            htmlContent: htmlBody,
+            textContent: null,
+            attachments: null,
+            tags: EmailUseCaseTags.AuthConfirmEmail,
+            cancellationToken: cancellationToken);
     }
 
     private Task ProcessSendWelcomeEmailAsync(

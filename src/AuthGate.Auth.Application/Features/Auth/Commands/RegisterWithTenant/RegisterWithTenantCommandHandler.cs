@@ -150,29 +150,6 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
             // 4. Generate JWT BEFORE saving outbox (use pending provisioning tokens)
             var (accessToken, refreshToken) = await _tokenService.GeneratePendingProvisioningTokensAsync(user);
 
-            // 4b. Send email verification link
-            var confirmToken = await _userManager.GenerateEmailConfirmationTokenAsync(user);
-            var frontendUrl = _configuration["Frontend:ConfirmEmailUrl"] ?? "http://localhost:4200/confirm-email";
-            var verifyUrl = $"{frontendUrl}?token={Uri.EscapeDataString(confirmToken)}&email={Uri.EscapeDataString(user.Email!)}";
-            var subject = "Vérifiez votre adresse email";
-            var firstName = user.FirstName ?? string.Empty;
-            var htmlBody = $$"""
-<h2>✉️ Vérification d'email</h2>
-<p>Bonjour {{firstName}},</p>
-<p>Pour finaliser votre inscription, veuillez vérifier votre adresse email en cliquant sur le bouton ci-dessous :</p>
-<p><a href="{{verifyUrl}}">Vérifier mon email</a></p>
-<p>Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.</p>
-""";
-
-            await _emailing.QueueHtmlAsync(
-                toEmail: user.Email!,
-                subject: subject,
-                htmlContent: htmlBody,
-                textContent: null,
-                attachments: null,
-                tags: EmailUseCaseTags.AuthConfirmEmail,
-                cancellationToken: cancellationToken);
-
             // 5. Create OutboxMessage for async organization provisioning
             var payload = new ProvisionOrganizationPayload
             {

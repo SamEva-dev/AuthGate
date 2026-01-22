@@ -3,6 +3,7 @@ using AuthGate.Auth.Application.Common.Interfaces;
 using AuthGate.Auth.Domain.Entities;
 using LocaGuest.Emailing.Abstractions;
 using MediatR;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -73,7 +74,13 @@ public class RequestPasswordResetCommandHandler : IRequestHandler<RequestPasswor
 
         // Send reset email
         var frontendUrl = _configuration["Frontend:ResetPasswordUrl"] ?? "http://localhost:4200/reset-password";
-        var resetUrl = $"{frontendUrl}?token={Uri.EscapeDataString(resetToken)}&email={Uri.EscapeDataString(request.Email)}";
+        var resetUrl = QueryHelpers.AddQueryString(
+            uri: frontendUrl,
+            queryString: new Dictionary<string, string?>
+            {
+                ["token"] = resetToken,
+                ["email"] = request.Email
+            });
 
         var emailBody = $@"
             <h2>Password Reset Request</h2>

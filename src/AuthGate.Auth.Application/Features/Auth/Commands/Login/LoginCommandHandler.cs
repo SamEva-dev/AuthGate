@@ -70,7 +70,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<LoginRes
             if (!user.EmailConfirmed)
             {
                 _logger.LogWarning("Login attempt for unverified email: {Email}", request.Email);
-                return Result.Failure<LoginResponseDto>("Email not verified");
+                return Result.Failure<LoginResponseDto>("Veuillez confirmer votre adresse email avant de vous connecter.");
             }
 
             // Use SignInManager to check password and handle lockout automatically

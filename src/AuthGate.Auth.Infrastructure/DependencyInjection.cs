@@ -1,13 +1,11 @@
 using AuthGate.Auth.Application.Common.Interfaces;
 using AuthGate.Auth.Application.Services;
-using AuthGate.Auth.Application.Services.Email;
 using AuthGate.Auth.Domain.Entities;
 using AuthGate.Auth.Domain.Repositories;
 using AuthGate.Auth.Infrastructure.Persistence;
 using AuthGate.Auth.Infrastructure.Persistence.Repositories;
 using AuthGate.Auth.Infrastructure.Repositories;
 using AuthGate.Auth.Infrastructure.Services;
-using AuthGate.Auth.Infrastructure.Services.Email;
 using AuthGate.Auth.Application.Common.Clients;
 using AuthGate.Auth.Infrastructure.Options;
 using Microsoft.EntityFrameworkCore;
@@ -156,20 +154,6 @@ public static class DependencyInjection
         services.AddScoped<ITotpService, TotpService>();
         services.AddScoped<ITwoFactorService, TwoFactorService>();
         services.AddScoped<IDeviceFingerprintService, DeviceFingerprintService>();
-        services.Configure<EmailSettings>(configuration.GetSection(EmailSettings.SectionName));
-        services.Configure<AuthGate.Auth.Infrastructure.Services.Email.BrevoSettings>(configuration.GetSection("Brevo"));
-
-        services.AddHttpClient("BrevoEmail")
-            .ConfigureHttpClient((sp, c) =>
-            {
-                var brevo = sp.GetRequiredService<IOptions<AuthGate.Auth.Infrastructure.Services.Email.BrevoSettings>>().Value;
-                var baseUrl = string.IsNullOrWhiteSpace(brevo.ApiBaseUrl) ? "https://api.brevo.com" : brevo.ApiBaseUrl.TrimEnd('/');
-                c.BaseAddress = new Uri($"{baseUrl}/v3/");
-                c.Timeout = TimeSpan.FromSeconds(30);
-            });
-
-        services.AddScoped<SmtpEmailService>();
-        services.AddScoped<BrevoEmailService>();
         services.AddScoped<IAuditService, AuditService>();
         services.AddScoped<IUserRoleService, UserRoleService>();
         services.AddScoped<Application.Common.Interfaces.IHttpContextAccessor, HttpContextAccessorService>();
