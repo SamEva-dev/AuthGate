@@ -2,12 +2,12 @@ using System.Text.Json;
 using AuthGate.Auth.Application.Common;
 using AuthGate.Auth.Application.Common.Interfaces;
 using AuthGate.Auth.Application.Services;
-using AuthGate.Auth.Application.Services.Email;
 using AuthGate.Auth.Domain.Constants;
 using Roles = AuthGate.Auth.Domain.Constants.Roles;
 using AuthGate.Auth.Domain.Entities;
 using AuthGate.Auth.Domain.Enums;
 using AuthGate.Auth.Domain.Repositories;
+using LocaGuest.Emailing.Abstractions;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
@@ -29,7 +29,7 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
     private readonly ITokenService _tokenService;
     private readonly IOutboxRepository _outboxRepository;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IEmailService _emailService;
+    private readonly IEmailingService _emailing;
     private readonly IConfiguration _configuration;
     private readonly ILogger<RegisterWithTenantCommandHandler> _logger;
 
@@ -38,7 +38,7 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
         ITokenService tokenService,
         IOutboxRepository outboxRepository,
         IUnitOfWork unitOfWork,
-        IEmailService emailService,
+        IEmailingService emailing,
         IConfiguration configuration,
         ILogger<RegisterWithTenantCommandHandler> logger)
     {
@@ -46,7 +46,7 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
         _tokenService = tokenService;
         _outboxRepository = outboxRepository;
         _unitOfWork = unitOfWork;
-        _emailService = emailService;
+        _emailing = emailing;
         _configuration = configuration;
         _logger = logger;
     }
@@ -154,11 +154,24 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
             var confirmToken = await _userManager.GenerateEmailConfirmationTokenAsync(user);
             var frontendUrl = _configuration["Frontend:ConfirmEmailUrl"] ?? "http://localhost:4200/confirm-email";
             var verifyUrl = $"{frontendUrl}?token={Uri.EscapeDataString(confirmToken)}&email={Uri.EscapeDataString(user.Email!)}";
-            await _emailService.SendEmailVerificationAsync(
-                user.Email!,
-                user.FirstName ?? string.Empty,
-                verifyUrl,
-                cancellationToken);
+            var subject = "Vérifiez votre adresse email";
+            var firstName = user.FirstName ?? string.Empty;
+            var htmlBody = $$"""
+<h2>✉️ Vérification d'email</h2>
+<p>Bonjour {{firstName}},</p>
+<p>Pour finaliser votre inscription, veuillez vérifier votre adresse email en cliquant sur le bouton ci-dessous :</p>
+<p><a href="{{verifyUrl}}">Vérifier mon email</a></p>
+<p>Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.</p>
+""";
+
+            await _emailing.QueueHtmlAsync(
+                toEmail: user.Email!,
+                subject: subject,
+                htmlContent: htmlBody,
+                textContent: null,
+                attachments: null,
+                tags: EmailUseCaseTags.AuthConfirmEmail,
+                cancellationToken: cancellationToken);
 
             // 5. Create OutboxMessage for async organization provisioning
             var payload = new ProvisionOrganizationPayload

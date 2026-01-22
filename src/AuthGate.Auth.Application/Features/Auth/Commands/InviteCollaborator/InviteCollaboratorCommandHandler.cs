@@ -1,10 +1,10 @@
 using AuthGate.Auth.Application.Common;
 using AuthGate.Auth.Application.Common.Interfaces;
 using AuthGate.Auth.Application.Services;
-using AuthGate.Auth.Application.Services.Email;
 using AuthGate.Auth.Domain.Constants;
 using AuthGate.Auth.Domain.Entities;
 using AuthGate.Auth.Domain.Enums;
+using LocaGuest.Emailing.Abstractions;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -19,7 +19,7 @@ public class InviteCollaboratorCommandHandler : IRequestHandler<InviteCollaborat
     private readonly UserManager<User> _userManager;
     private readonly ICurrentUserService _currentUserService;
     private readonly IOrganizationContext _organizationContext;
-    private readonly IEmailService _emailService;
+    private readonly IEmailingService _emailing;
     private readonly IConfiguration _configuration;
     private readonly ILogger<InviteCollaboratorCommandHandler> _logger;
 
@@ -28,7 +28,7 @@ public class InviteCollaboratorCommandHandler : IRequestHandler<InviteCollaborat
         UserManager<User> userManager,
         ICurrentUserService currentUserService,
         IOrganizationContext organizationContext,
-        IEmailService emailService,
+        IEmailingService emailing,
         IConfiguration configuration,
         ILogger<InviteCollaboratorCommandHandler> logger)
     {
@@ -36,7 +36,7 @@ public class InviteCollaboratorCommandHandler : IRequestHandler<InviteCollaborat
         _userManager = userManager;
         _currentUserService = currentUserService;
         _organizationContext = organizationContext;
-        _emailService = emailService;
+        _emailing = emailing;
         _configuration = configuration;
         _logger = logger;
     }
@@ -129,14 +129,26 @@ public class InviteCollaboratorCommandHandler : IRequestHandler<InviteCollaborat
             // 8. ✅ Send invitation email
             try
             {
-                await _emailService.SendInvitationEmailAsync(
+                var toName = request.Email.Split('@')[0];
+                var inviterName = $"{inviter.FirstName} {inviter.LastName}";
+                var subject = $"Invitation à rejoindre {organizationName} sur LocaGuest";
+                var htmlBody = $$"""
+<h2>Invitation à rejoindre une équipe</h2>
+<p>Bonjour {{toName}},</p>
+<p><strong>{{inviterName}}</strong> vous invite à rejoindre <strong>{{organizationName}}</strong> sur LocaGuest.</p>
+<p><strong>Votre rôle:</strong> {{request.Role}}</p>
+<p><a href="{{invitationUrl}}">Accepter l'invitation</a></p>
+<p style="font-size: 14px; color: #6b7280;">Cette invitation expire le <strong>{{invitation.ExpiresAt:dd/MM/yyyy à HH:mm}}</strong></p>
+<p>Si vous n'avez pas demandé cette invitation, vous pouvez ignorer cet email en toute sécurité.</p>
+""";
+
+                await _emailing.QueueHtmlAsync(
                     toEmail: request.Email,
-                    toName: request.Email.Split('@')[0], // Use email prefix as default name
-                    inviterName: $"{inviter.FirstName} {inviter.LastName}",
-                    organizationName: organizationName,
-                    role: request.Role,
-                    invitationUrl: invitationUrl,
-                    expiresAt: invitation.ExpiresAt,
+                    subject: subject,
+                    htmlContent: htmlBody,
+                    textContent: null,
+                    attachments: null,
+                    tags: EmailUseCaseTags.AccessInviteUser,
                     cancellationToken: cancellationToken);
 
                 _logger.LogInformation(

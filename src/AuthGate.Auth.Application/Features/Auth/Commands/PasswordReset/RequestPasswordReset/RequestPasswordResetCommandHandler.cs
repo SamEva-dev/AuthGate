@@ -1,7 +1,7 @@
 using AuthGate.Auth.Application.Common;
 using AuthGate.Auth.Application.Common.Interfaces;
-using AuthGate.Auth.Application.Services.Email;
 using AuthGate.Auth.Domain.Entities;
+using LocaGuest.Emailing.Abstractions;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -16,20 +16,20 @@ namespace AuthGate.Auth.Application.Features.Auth.Commands.PasswordReset.Request
 public class RequestPasswordResetCommandHandler : IRequestHandler<RequestPasswordResetCommand, Result<bool>>
 {
     private readonly UserManager<User> _userManager;
-    private readonly IEmailService _emailService;
+    private readonly IEmailingService _emailing;
     private readonly IConfiguration _configuration;
     private readonly DbContext _context;
     private readonly ILogger<RequestPasswordResetCommandHandler> _logger;
 
     public RequestPasswordResetCommandHandler(
         UserManager<User> userManager,
-        IEmailService emailService,
+        IEmailingService emailing,
         IConfiguration configuration,
         DbContext context,
         ILogger<RequestPasswordResetCommandHandler> logger)
     {
         _userManager = userManager;
-        _emailService = emailService;
+        _emailing = emailing;
         _configuration = configuration;
         _context = context;
         _logger = logger;
@@ -86,12 +86,14 @@ public class RequestPasswordResetCommandHandler : IRequestHandler<RequestPasswor
             <p>Best regards,<br/>AuthGate Team</p>
         ";
 
-        await _emailService.SendEmailAsync(
-            request.Email,
-            "Password Reset Request",
-            emailBody,
-            null,  // textBody
-            cancellationToken);
+        await _emailing.QueueHtmlAsync(
+            toEmail: request.Email,
+            subject: "Password Reset Request",
+            htmlContent: emailBody,
+            textContent: null,
+            attachments: null,
+            tags: EmailUseCaseTags.AuthResetPassword,
+            cancellationToken: cancellationToken);
 
         _logger.LogInformation("Password reset email sent to: {Email}", request.Email);
 

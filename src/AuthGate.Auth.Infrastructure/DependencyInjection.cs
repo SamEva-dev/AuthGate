@@ -170,20 +170,6 @@ public static class DependencyInjection
 
         services.AddScoped<SmtpEmailService>();
         services.AddScoped<BrevoEmailService>();
-        services.AddScoped<IEmailService>(sp =>
-        {
-            var settings = sp.GetRequiredService<IOptions<EmailSettings>>().Value;
-            var providerName = settings.Provider?.Trim();
-            if (string.IsNullOrWhiteSpace(providerName))
-                providerName = "Brevo";
-
-            return providerName.ToLowerInvariant() switch
-            {
-                "brevo" => sp.GetRequiredService<BrevoEmailService>(),
-                "smtp" => sp.GetRequiredService<SmtpEmailService>(),
-                _ => throw new InvalidOperationException($"Unknown EmailSettings:Provider '{settings.Provider}'. Allowed: Smtp, Brevo")
-            };
-        });
         services.AddScoped<IAuditService, AuditService>();
         services.AddScoped<IUserRoleService, UserRoleService>();
         services.AddScoped<Application.Common.Interfaces.IHttpContextAccessor, HttpContextAccessorService>();
