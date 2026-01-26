@@ -51,8 +51,18 @@ public class ManagerInvitationsController : ControllerBase
     [ProducesResponseType(typeof(CreateManagerInvitationResponseDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> Create([FromBody] CreateManagerInvitationRequestDto dto, CancellationToken ct)
     {
-        if (dto == null || string.IsNullOrWhiteSpace(dto.Email) || dto.OrganizationId == Guid.Empty)
-            return BadRequest(new { error = "email and organizationId are required" });
+        if (dto == null || string.IsNullOrWhiteSpace(dto.Email))
+            return BadRequest(new { error = "email is required" });
+
+        // Allow simplified dashboard payload without organizationId.
+        // If not provided, infer from tenant context.
+        var effectiveOrgId = dto.OrganizationId;
+        if (effectiveOrgId == Guid.Empty)
+        {
+            if (!_org.OrganizationId.HasValue)
+                return Forbid();
+            effectiveOrgId = _org.OrganizationId.Value;
+        }
 
         var userIdStr = User.FindFirstValue("sub") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrWhiteSpace(userIdStr) || !Guid.TryParse(userIdStr, out var inviterId))
@@ -69,7 +79,7 @@ public class ManagerInvitationsController : ControllerBase
         if (!isPlatformAdmin)
         {
             var ctxOrg = User.FindFirstValue("org_id") ?? User.FindFirstValue("organization_id");
-            if (string.IsNullOrWhiteSpace(ctxOrg) || !Guid.TryParse(ctxOrg, out var ctxOrgId) || ctxOrgId != dto.OrganizationId)
+            if (string.IsNullOrWhiteSpace(ctxOrg) || !Guid.TryParse(ctxOrg, out var ctxOrgId) || ctxOrgId != effectiveOrgId)
                 return Forbid();
         }
 
@@ -91,7 +101,7 @@ public class ManagerInvitationsController : ControllerBase
 
         var existingPending = await _db.ManagerInvitations
             .AsNoTracking()
-            .Where(x => x.OrganizationId == dto.OrganizationId
+            .Where(x => x.OrganizationId == effectiveOrgId
                         && x.Email == normalizedEmail
                         && x.Status == ManagerInvitationStatus.Pending
                         && x.ExpiresAtUtc > DateTime.UtcNow)
@@ -99,13 +109,46 @@ public class ManagerInvitationsController : ControllerBase
 
         if (existingPending != null)
         {
-            return BadRequest(new { error = "An active invitation already exists for this email" });
+            return Conflict(new { error = "An active invitation already exists for this email" });
         }
 
         var existingUser = await _userManager.FindByEmailAsync(dto.Email.Trim());
         var invitationType = existingUser == null ? ManagerInvitationType.Activate : ManagerInvitationType.Grant;
 
         var roleIds = dto.RoleIds ?? new List<Guid>();
+
+        // Allow simplified roleKey (dashboard) -> role mapping.
+        // If no RoleIds were provided, try to map from role key.
+        if (roleIds.Count == 0)
+        {
+            var roleKey = (dto.GetType().GetProperty("RoleKey")?.GetValue(dto) as string) ?? string.Empty;
+            roleKey = roleKey.Trim().ToLowerInvariant();
+
+            if (!string.IsNullOrWhiteSpace(roleKey))
+            {
+                // Minimal mapping without changing the UI.
+                // Dashboard currently sends: property-manager, support-agent, accountant, viewer
+                var mappedRoleName = roleKey switch
+                {
+                    "property-manager" => AuthGate.Auth.Domain.Constants.Roles.TenantManager,
+                    "support-agent" => AuthGate.Auth.Domain.Constants.Roles.TenantUser,
+                    "accountant" => AuthGate.Auth.Domain.Constants.Roles.ReadOnly,
+                    "viewer" => AuthGate.Auth.Domain.Constants.Roles.ReadOnly,
+                    _ => string.Empty
+                };
+
+                if (!string.IsNullOrWhiteSpace(mappedRoleName))
+                {
+                    var role = await _roleManager.Roles.AsNoTracking()
+                        .FirstOrDefaultAsync(r => r.Name != null && r.Name == mappedRoleName, ct);
+
+                    if (role != null)
+                    {
+                        roleIds.Add(role.Id);
+                    }
+                }
+            }
+        }
         if (roleIds.Count > 0)
         {
             foreach (var roleId in roleIds)
@@ -119,7 +162,7 @@ public class ManagerInvitationsController : ControllerBase
         }
 
         var (inv, rawToken) = ManagerInvitation.Create(
-            organizationId: dto.OrganizationId,
+            organizationId: effectiveOrgId,
             email: normalizedEmail,
             type: invitationType,
             roleIds: roleIds,
@@ -130,7 +173,7 @@ public class ManagerInvitationsController : ControllerBase
         {
             inv.ExistingUserId = existingUser.Id;
 
-            await EnsureManagerAccessGrantedAsync(existingUser, dto.OrganizationId, roleIds, inviterId, ct);
+            await EnsureManagerAccessGrantedAsync(existingUser, effectiveOrgId, roleIds, inviterId, ct);
 
             inv.MarkUsed(inviterId);
         }
@@ -157,7 +200,7 @@ public class ManagerInvitationsController : ControllerBase
 
             inv.ExistingUserId = newUser.Id;
 
-            await EnsureManagerAccessGrantedAsync(newUser, dto.OrganizationId, roleIds, inviterId, ct);
+            await EnsureManagerAccessGrantedAsync(newUser, effectiveOrgId, roleIds, inviterId, ct);
         }
 
         _db.ManagerInvitations.Add(inv);

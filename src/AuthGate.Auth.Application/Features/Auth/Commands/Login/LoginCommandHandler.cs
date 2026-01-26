@@ -138,11 +138,15 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<LoginRes
 
                         // Restrict access to Access-Manager-Pro to specific roles only
                         // Allowed: SuperAdmin, TenantOwner
-                        if (!trustedRoles.Any(r => string.Equals(r, Domain.Constants.Roles.SuperAdmin, StringComparison.OrdinalIgnoreCase)
-                                               || string.Equals(r, Domain.Constants.Roles.TenantOwner, StringComparison.OrdinalIgnoreCase)))
+                        // Scope: only when app == manager
+                        if (string.Equals(trustedApp, "manager", StringComparison.OrdinalIgnoreCase))
                         {
-                            _logger.LogWarning("Login denied for {UserId} ({Email}): role not allowed", user.Id, user.Email);
-                            return Result.Failure<LoginResponseDto>("Access denied");
+                            if (!trustedRoles.Any(r => string.Equals(r, Domain.Constants.Roles.SuperAdmin, StringComparison.OrdinalIgnoreCase)
+                                                   || string.Equals(r, Domain.Constants.Roles.TenantOwner, StringComparison.OrdinalIgnoreCase)))
+                            {
+                                _logger.LogWarning("Login denied for {UserId} ({Email}): role not allowed", user.Id, user.Email);
+                                return Result.Failure<LoginResponseDto>("Access denied");
+                            }
                         }
 
                         var isSuperAdmin = trustedRoles.Any(r => string.Equals(r, Domain.Constants.Roles.SuperAdmin, StringComparison.OrdinalIgnoreCase));
@@ -247,11 +251,15 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<LoginRes
 
             // Restrict access to Access-Manager-Pro to specific roles only
             // Allowed: SuperAdmin, TenantOwner
-            if (!roles.Any(r => string.Equals(r, Domain.Constants.Roles.SuperAdmin, StringComparison.OrdinalIgnoreCase)
-                             || string.Equals(r, Domain.Constants.Roles.TenantOwner, StringComparison.OrdinalIgnoreCase)))
+            // Scope: only when app == manager
+            if (string.Equals(app, "manager", StringComparison.OrdinalIgnoreCase))
             {
-                _logger.LogWarning("Login denied for {UserId} ({Email}): role not allowed", user.Id, user.Email);
-                return Result.Failure<LoginResponseDto>("Access denied");
+                if (!roles.Any(r => string.Equals(r, Domain.Constants.Roles.SuperAdmin, StringComparison.OrdinalIgnoreCase)
+                                 || string.Equals(r, Domain.Constants.Roles.TenantOwner, StringComparison.OrdinalIgnoreCase)))
+                {
+                    _logger.LogWarning("Login denied for {UserId} ({Email}): role not allowed", user.Id, user.Email);
+                    return Result.Failure<LoginResponseDto>("Access denied");
+                }
             }
 
             // Generate tokens (MFA is false here since we passed the check above)

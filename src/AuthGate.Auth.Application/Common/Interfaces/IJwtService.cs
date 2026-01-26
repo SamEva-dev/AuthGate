@@ -46,6 +46,12 @@ public interface IJwtService
     /// <returns>The JWT ID</returns>
     string? GetJwtId(string token);
 
+    /// <summary>
+    /// Validate an access token signature/issuer/audience and return claims.
+    /// Set validateLifetime=false to read claims from an expired token.
+    /// </summary>
+    ClaimsPrincipal? ValidateAccessToken(string token, bool validateLifetime = true);
+
     string GenerateMachineToken(string scope);
 
     string GenerateMachineToken(string scope, string clientId, TimeSpan? lifetime = null, string? audience = null);

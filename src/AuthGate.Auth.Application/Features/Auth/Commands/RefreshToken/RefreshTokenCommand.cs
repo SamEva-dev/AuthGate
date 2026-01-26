@@ -16,6 +16,11 @@ public record RefreshTokenCommand : IRequest<Result<TokenResponseDto>>, IAuditab
     /// </summary>
     public required string RefreshToken { get; init; }
 
+    /// <summary>
+    /// Current access token (optional) used to preserve app + org context during refresh
+    /// </summary>
+    public string? AccessToken { get; init; }
+
     public AuditAction AuditAction => AuditAction.TokenRefreshed;
 
     public string GetAuditDescription() => "Token refresh request";

@@ -255,7 +255,8 @@ public class AuthController : ControllerBase
     {
         var command = new RefreshTokenCommand
         {
-            RefreshToken = dto.RefreshToken
+            RefreshToken = dto.RefreshToken,
+            AccessToken = dto.AccessToken
         };
 
         var result = await _mediator.Send(command);
@@ -540,14 +541,16 @@ public class AuthController : ControllerBase
 
         await _unitOfWork.RefreshTokens.RevokeAllUserTokensAsync(userGuid, "Organization context switched", cancellationToken);
 
+        var app = User.FindFirstValue("app") ?? "locaguest";
+
         string accessToken;
         if (isPlatformAdmin)
         {
-            accessToken = _jwtService.GeneratePlatformAccessToken(user.Id, user.Email!, roles, permissions, user.MfaEnabled, pwdChangeRequired: false, organizationId: dto.OrganizationId);
+            accessToken = _jwtService.GeneratePlatformAccessToken(user.Id, user.Email!, roles, permissions, user.MfaEnabled, pwdChangeRequired: false, organizationId: dto.OrganizationId, app: app);
         }
         else
         {
-            accessToken = _jwtService.GenerateTenantAccessToken(user.Id, user.Email!, roles, permissions, user.MfaEnabled, dto.OrganizationId, pwdChangeRequired: false);
+            accessToken = _jwtService.GenerateTenantAccessToken(user.Id, user.Email!, roles, permissions, user.MfaEnabled, dto.OrganizationId, pwdChangeRequired: false, app: app);
         }
 
         var refreshToken = _jwtService.GenerateRefreshToken();
@@ -631,7 +634,9 @@ public class AuthController : ControllerBase
 
         await _unitOfWork.RefreshTokens.RevokeAllUserTokensAsync(userGuid, "Organization context cleared", cancellationToken);
 
-        var accessToken = _jwtService.GeneratePlatformAccessToken(user.Id, user.Email!, roles, permissions, user.MfaEnabled, pwdChangeRequired: false);
+        var app = User.FindFirstValue("app") ?? "locaguest";
+
+        var accessToken = _jwtService.GeneratePlatformAccessToken(user.Id, user.Email!, roles, permissions, user.MfaEnabled, pwdChangeRequired: false, app: app);
         var refreshToken = _jwtService.GenerateRefreshToken();
         var refreshTokenHash = HashRefreshToken(refreshToken);
         var jwtId = _jwtService.GetJwtId(accessToken) ?? Guid.NewGuid().ToString();

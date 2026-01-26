@@ -93,4 +93,6 @@ public static class Roles
         TenantAdmin,
         TenantManager
     };
+
+    public static string? Auditor { get; set; }
 }

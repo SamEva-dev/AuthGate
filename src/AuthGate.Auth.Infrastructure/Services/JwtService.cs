@@ -248,4 +248,35 @@ public class JwtService : IJwtService
             return null;
         }
     }
+
+    public ClaimsPrincipal? ValidateAccessToken(string token, bool validateLifetime = true)
+    {
+        if (string.IsNullOrWhiteSpace(token)) return null;
+
+        try
+        {
+            var signingKey = _rsaKeyService.GetSigningKey();
+
+            var validationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidIssuer = _configuration["Jwt:Issuer"],
+                ValidateAudience = true,
+                ValidAudience = _configuration["Jwt:Audience"],
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKey = signingKey,
+                ValidateLifetime = validateLifetime,
+                ClockSkew = TimeSpan.FromMinutes(1)
+            };
+
+            var principal = _tokenHandler.ValidateToken(token, validationParameters, out var validatedToken);
+            if (validatedToken is not JwtSecurityToken jwt) return null;
+            if (!string.Equals(jwt.Header.Alg, SecurityAlgorithms.RsaSha256, StringComparison.OrdinalIgnoreCase)) return null;
+            return principal;
+        }
+        catch
+        {
+            return null;
+        }
+    }
 }

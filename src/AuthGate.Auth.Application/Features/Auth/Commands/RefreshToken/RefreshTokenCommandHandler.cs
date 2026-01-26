@@ -94,6 +94,31 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, R
             return Result.Failure<TokenResponseDto>("User account is not active");
         }
 
+        // Preserve context from the current access token (app + org) when provided.
+        string app = "locaguest";
+        Guid? orgIdFromToken = null;
+        if (!string.IsNullOrWhiteSpace(request.AccessToken))
+        {
+            var principal = _jwtService.ValidateAccessToken(request.AccessToken, validateLifetime: false);
+            if (principal != null)
+            {
+                var jti = principal.FindFirst("jti")?.Value;
+                if (!string.IsNullOrWhiteSpace(jti) && !string.Equals(jti, refreshToken.JwtId, StringComparison.Ordinal))
+                {
+                    _logger.LogWarning("Refresh denied for {UserId}: jti mismatch", refreshToken.UserId);
+                    return Result.Failure<TokenResponseDto>("Invalid refresh token");
+                }
+
+                app = principal.FindFirst("app")?.Value ?? app;
+
+                var orgRaw = principal.FindFirst("org_id")?.Value ?? principal.FindFirst("organization_id")?.Value;
+                if (!string.IsNullOrWhiteSpace(orgRaw) && Guid.TryParse(orgRaw, out var parsedOrg) && parsedOrg != Guid.Empty)
+                {
+                    orgIdFromToken = parsedOrg;
+                }
+            }
+        }
+
         // Generate new tokens using Identity
         var roles = await _userRoleService.GetUserRolesAsync(user);
         var permissions = await _userRoleService.GetUserPermissionsAsync(user);
@@ -107,27 +132,48 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, R
 
         // Restrict access to Access-Manager-Pro to specific roles only
         // Allowed: SuperAdmin, TenantOwner
-        if (!roles.Any(r => string.Equals(r, Domain.Constants.Roles.SuperAdmin, StringComparison.OrdinalIgnoreCase)
-                         || string.Equals(r, Domain.Constants.Roles.TenantOwner, StringComparison.OrdinalIgnoreCase)))
+        // Scope: only when app == manager
+        if (string.Equals(app, "manager", StringComparison.OrdinalIgnoreCase))
         {
-            _logger.LogWarning("Refresh denied for {UserId}: role not allowed", user.Id);
-            return Result.Failure<TokenResponseDto>("Access denied");
+            if (!roles.Any(r => string.Equals(r, Domain.Constants.Roles.SuperAdmin, StringComparison.OrdinalIgnoreCase)
+                             || string.Equals(r, Domain.Constants.Roles.TenantOwner, StringComparison.OrdinalIgnoreCase)))
+            {
+                _logger.LogWarning("Refresh denied for {UserId}: role not allowed", user.Id);
+                return Result.Failure<TokenResponseDto>("Access denied");
+            }
         }
 
         var isSuperAdminRole = roles.Any(r => string.Equals(r, Domain.Constants.Roles.SuperAdmin, StringComparison.OrdinalIgnoreCase));
         string newAccessToken;
         if (isSuperAdminRole)
         {
-            newAccessToken = _jwtService.GeneratePlatformAccessToken(user.Id, user.Email!, roles, permissions, user.MfaEnabled, passwordChangeRequired);
+            newAccessToken = _jwtService.GeneratePlatformAccessToken(
+                user.Id,
+                user.Email!,
+                roles,
+                permissions,
+                user.MfaEnabled,
+                passwordChangeRequired,
+                organizationId: orgIdFromToken,
+                app: app);
         }
         else
         {
-            if (!user.OrganizationId.HasValue || user.OrganizationId.Value == Guid.Empty)
+            var effectiveOrgId = orgIdFromToken ?? user.OrganizationId;
+            if (!effectiveOrgId.HasValue || effectiveOrgId.Value == Guid.Empty)
             {
                 return Result.Failure<TokenResponseDto>("Cannot issue access token without OrganizationId.");
             }
 
-            newAccessToken = _jwtService.GenerateTenantAccessToken(user.Id, user.Email!, roles, permissions, user.MfaEnabled, user.OrganizationId.Value, passwordChangeRequired);
+            newAccessToken = _jwtService.GenerateTenantAccessToken(
+                user.Id,
+                user.Email!,
+                roles,
+                permissions,
+                user.MfaEnabled,
+                effectiveOrgId.Value,
+                passwordChangeRequired,
+                app: app);
         }
 
         var newRefreshToken = _jwtService.GenerateRefreshToken();

@@ -9,4 +9,9 @@ public record RefreshTokenDto
     /// Refresh token
     /// </summary>
     public required string RefreshToken { get; init; }
+
+    /// <summary>
+    /// Current access token (optional) used to preserve app + org context during refresh
+    /// </summary>
+    public string? AccessToken { get; init; }
 }
