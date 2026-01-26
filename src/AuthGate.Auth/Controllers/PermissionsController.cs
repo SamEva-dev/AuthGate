@@ -10,6 +10,7 @@ namespace AuthGate.Auth.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize(Roles = $"{Roles.SuperAdmin},{Roles.TenantOwner}")]
+[Authorize(Policy = "NoPasswordChangeRequired")]
 public class PermissionsController : ControllerBase
 {
     private readonly IMediator _mediator;

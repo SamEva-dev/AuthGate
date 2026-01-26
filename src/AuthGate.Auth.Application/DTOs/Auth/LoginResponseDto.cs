@@ -29,4 +29,8 @@ public record LoginResponseDto
     /// Temporary token for MFA verification (if MFA is enabled)
     /// </summary>
     public string? MfaToken { get; init; }
+
+    public bool PasswordChangeRequired { get; init; }
+
+    public DateTime? PasswordChangeBeforeUtc { get; init; }
 }

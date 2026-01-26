@@ -1,6 +1,8 @@
 using AuthGate.Auth.Domain.Constants;
 using AuthGate.Auth.Domain.Entities;
+using AuthGate.Auth.Domain.Enums;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace AuthGate.Auth.Infrastructure.Persistence.DataSeeding;
@@ -52,6 +54,80 @@ public class AuthDbSeeder
         {
             _logger.LogError(ex, "An error occurred while seeding the database");
             throw;
+        }
+    }
+
+    public async Task EnsurePlatformAdminAsync(IConfiguration configuration)
+    {
+        var seedEnabled = configuration.GetValue<bool>("Identity:SeedPlatformAdmin");
+        if (!seedEnabled)
+        {
+            return;
+        }
+
+        var email = configuration["Identity:PlatformAdmin:Email"];
+        var initialPassword = configuration["Identity:PlatformAdmin:InitialPassword"];
+        var firstName = configuration["Identity:PlatformAdmin:FirstName"];
+        var lastName = configuration["Identity:PlatformAdmin:LastName"];
+
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(initialPassword))
+        {
+            _logger.LogWarning("Platform admin seeding enabled but missing Email and/or InitialPassword configuration.");
+            return;
+        }
+
+        var existingUser = await _userManager.FindByEmailAsync(email);
+        if (existingUser != null)
+        {
+            var hasRole = await _userManager.IsInRoleAsync(existingUser, Roles.SuperAdmin);
+            if (!hasRole)
+            {
+                var addRole = await _userManager.AddToRoleAsync(existingUser, Roles.SuperAdmin);
+                if (!addRole.Succeeded)
+                {
+                    _logger.LogError("Failed to add SuperAdmin role to existing platform admin {Email}: {Errors}",
+                        email, string.Join(", ", addRole.Errors.Select(e => e.Description)));
+                }
+            }
+
+            return;
+        }
+
+        var user = new User
+        {
+            Id = Guid.NewGuid(),
+            UserName = email,
+            Email = email,
+            EmailConfirmed = true,
+            FirstName = string.IsNullOrWhiteSpace(firstName) ? "Platform" : firstName,
+            LastName = string.IsNullOrWhiteSpace(lastName) ? "Owner" : lastName,
+            IsActive = true,
+            Status = UserStatus.Active,
+            MfaEnabled = false,
+            OrganizationId = null,
+            MustChangePassword = true,
+            MustChangePasswordBeforeUtc = DateTime.UtcNow.AddDays(2),
+            PasswordLastChangedAtUtc = null,
+            CreatedAtUtc = DateTime.UtcNow
+        };
+
+        var createResult = await _userManager.CreateAsync(user, initialPassword);
+        if (!createResult.Succeeded)
+        {
+            _logger.LogError("Failed to create platform admin user {Email}: {Errors}",
+                email, string.Join(", ", createResult.Errors.Select(e => e.Description)));
+            return;
+        }
+
+        var roleResult = await _userManager.AddToRoleAsync(user, Roles.SuperAdmin);
+        if (!roleResult.Succeeded)
+        {
+            _logger.LogError("Failed to add SuperAdmin role to platform admin {Email}: {Errors}",
+                email, string.Join(", ", roleResult.Errors.Select(e => e.Description)));
+        }
+        else
+        {
+            _logger.LogInformation("Created platform admin user: {Email}", email);
         }
     }
 

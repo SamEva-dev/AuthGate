@@ -24,7 +24,7 @@ public sealed class ObservabilityEnrichmentMiddleware
         var spanId = Activity.Current?.SpanId.ToString();
 
         var user = context.User;
-        var organizationId = user?.FindFirstValue("organization_id") ?? user?.FindFirstValue("organizationId");
+        var organizationId = user?.FindFirstValue("org_id") ?? user?.FindFirstValue("organization_id") ?? user?.FindFirstValue("organizationId");
         var userId = user?.FindFirstValue("sub") ?? user?.FindFirstValue(ClaimTypes.NameIdentifier);
         var clientId = user?.FindFirstValue("azp") ?? user?.FindFirstValue("client_id");
 

@@ -98,6 +98,13 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, R
         var roles = await _userRoleService.GetUserRolesAsync(user);
         var permissions = await _userRoleService.GetUserPermissionsAsync(user);
 
+        var passwordChangeRequired = user.MustChangePassword;
+        var passwordChangeExpired = user.MustChangePasswordBeforeUtc != null && DateTime.UtcNow > user.MustChangePasswordBeforeUtc.Value;
+        if (passwordChangeExpired)
+        {
+            passwordChangeRequired = true;
+        }
+
         // Restrict access to Access-Manager-Pro to specific roles only
         // Allowed: SuperAdmin, TenantOwner
         if (!roles.Any(r => string.Equals(r, Domain.Constants.Roles.SuperAdmin, StringComparison.OrdinalIgnoreCase)
@@ -107,12 +114,22 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, R
             return Result.Failure<TokenResponseDto>("Access denied");
         }
 
-        if (!user.OrganizationId.HasValue || user.OrganizationId.Value == Guid.Empty)
+        var isSuperAdminRole = roles.Any(r => string.Equals(r, Domain.Constants.Roles.SuperAdmin, StringComparison.OrdinalIgnoreCase));
+        string newAccessToken;
+        if (isSuperAdminRole)
         {
-            return Result.Failure<TokenResponseDto>("Cannot issue access token without OrganizationId.");
+            newAccessToken = _jwtService.GeneratePlatformAccessToken(user.Id, user.Email!, roles, permissions, user.MfaEnabled, passwordChangeRequired);
+        }
+        else
+        {
+            if (!user.OrganizationId.HasValue || user.OrganizationId.Value == Guid.Empty)
+            {
+                return Result.Failure<TokenResponseDto>("Cannot issue access token without OrganizationId.");
+            }
+
+            newAccessToken = _jwtService.GenerateTenantAccessToken(user.Id, user.Email!, roles, permissions, user.MfaEnabled, user.OrganizationId.Value, passwordChangeRequired);
         }
 
-        var newAccessToken = _jwtService.GenerateAccessToken(user.Id, user.Email!, roles, permissions, user.MfaEnabled, user.OrganizationId.Value);
         var newRefreshToken = _jwtService.GenerateRefreshToken();
         var jwtId = _jwtService.GetJwtId(newAccessToken) ?? Guid.NewGuid().ToString();
 
@@ -145,7 +162,9 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, R
         {
             AccessToken = newAccessToken,
             RefreshToken = newRefreshToken,
-            ExpiresIn = 900 // 15 minutes
+            ExpiresIn = 900, // 15 minutes
+            PasswordChangeRequired = passwordChangeRequired,
+            PasswordChangeBeforeUtc = user.MustChangePasswordBeforeUtc
         });
     }
 

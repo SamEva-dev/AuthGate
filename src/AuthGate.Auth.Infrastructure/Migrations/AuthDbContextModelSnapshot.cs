@@ -74,6 +74,71 @@ namespace AuthGate.Auth.Infrastructure.Migrations
                     b.ToTable("AuditLogs", (string)null);
                 });
 
+            modelBuilder.Entity("AuthGate.Auth.Domain.Entities.ManagerInvitation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<Guid?>("ExistingUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("InvitedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RoleIdsCsv")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Email");
+
+                    b.HasIndex("OrganizationId");
+
+                    b.HasIndex("TokenHash");
+
+                    b.HasIndex("OrganizationId", "Email");
+
+                    b.ToTable("ManagerInvitations", (string)null);
+                });
+
             modelBuilder.Entity("AuthGate.Auth.Domain.Entities.MfaSecret", b =>
                 {
                     b.Property<Guid>("Id")
@@ -545,6 +610,16 @@ namespace AuthGate.Auth.Infrastructure.Migrations
                     b.Property<bool>("MfaEnabled")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("MustChangePassword")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("must_change_password");
+
+                    b.Property<DateTime?>("MustChangePasswordBeforeUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("must_change_password_before_utc");
+
                     b.Property<string>("NormalizedEmail")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
@@ -559,6 +634,10 @@ namespace AuthGate.Auth.Infrastructure.Migrations
 
                     b.Property<string>("PasswordHash")
                         .HasColumnType("text");
+
+                    b.Property<DateTime?>("PasswordLastChangedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("password_last_changed_at_utc");
 
                     b.Property<string>("PhoneNumber")
                         .HasColumnType("text");
@@ -600,6 +679,42 @@ namespace AuthGate.Auth.Infrastructure.Migrations
                     b.HasIndex("OrganizationId");
 
                     b.ToTable("Users", (string)null);
+                });
+
+            modelBuilder.Entity("AuthGate.Auth.Domain.Entities.UserAppAccess", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AppId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("GrantedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("GrantedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("UserId", "AppId");
+
+                    b.HasIndex("AppId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("UserAppAccess", (string)null);
                 });
 
             modelBuilder.Entity("AuthGate.Auth.Domain.Entities.UserInvitation", b =>
@@ -679,6 +794,39 @@ namespace AuthGate.Auth.Infrastructure.Migrations
                     b.HasIndex("OrganizationId", "Email");
 
                     b.ToTable("UserInvitations", (string)null);
+                });
+
+            modelBuilder.Entity("AuthGate.Auth.Domain.Entities.UserOrganization", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RoleInOrg")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("UserId", "OrganizationId");
+
+                    b.HasIndex("OrganizationId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("UserOrganizations", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
@@ -868,6 +1016,28 @@ namespace AuthGate.Auth.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("AuthGate.Auth.Domain.Entities.UserAppAccess", b =>
+                {
+                    b.HasOne("AuthGate.Auth.Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("AuthGate.Auth.Domain.Entities.UserOrganization", b =>
+                {
+                    b.HasOne("AuthGate.Auth.Domain.Entities.User", "User")
+                        .WithMany("UserOrganizations")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
                 {
                     b.HasOne("AuthGate.Auth.Domain.Entities.Role", null)
@@ -938,6 +1108,8 @@ namespace AuthGate.Auth.Infrastructure.Migrations
                     b.Navigation("RecoveryCodes");
 
                     b.Navigation("RefreshTokens");
+
+                    b.Navigation("UserOrganizations");
                 });
 #pragma warning restore 612, 618
         }

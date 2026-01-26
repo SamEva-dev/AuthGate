@@ -19,4 +19,8 @@ public record TokenResponseDto
     /// Token expiration time in seconds
     /// </summary>
     public required int ExpiresIn { get; init; }
+
+    public bool PasswordChangeRequired { get; init; }
+
+    public DateTime? PasswordChangeBeforeUtc { get; init; }
 }

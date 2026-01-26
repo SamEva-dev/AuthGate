@@ -25,6 +25,8 @@ public class InvitationController : ControllerBase
     /// </summary>
     [HttpPost("invite")]
     [Authorize(Roles = "TenantOwner,TenantAdmin")]
+    [Authorize(Policy = "NoPasswordChangeRequired")]
+    [Authorize(Policy = "TenantContextRequired")]
     public async Task<IActionResult> InviteCollaborator([FromBody] InviteCollaboratorCommand command)
     {
         var result = await _mediator.Send(command);

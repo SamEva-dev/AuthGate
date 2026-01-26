@@ -29,6 +29,68 @@ public sealed class LocaGuestProvisioningClient : ILocaGuestProvisioningClient
         _httpContextAccessor = httpContextAccessor;
     }
 
+    public async Task<LocaGuestOrganizationDetailsDto?> GetOrganizationByIdAsync(
+        Guid organizationId,
+        CancellationToken ct = default)
+    {
+        if (organizationId == Guid.Empty)
+            return null;
+
+        var token = await _machineTokenProvider.GetProvisioningTokenAsync(ct);
+
+        using var msg = new HttpRequestMessage(HttpMethod.Get, $"api/provisioning/organizations/{organizationId:D}");
+        PropagateCorrelationId(msg);
+        msg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        using var res = await _http.SendAsync(msg, ct);
+
+        if (res.IsSuccessStatusCode)
+        {
+            var dto = await res.Content.ReadFromJsonAsync<LocaGuestOrganizationDetailsDto>(cancellationToken: ct);
+            return dto;
+        }
+
+        if (res.StatusCode is HttpStatusCode.NotFound)
+            return null;
+
+        if (res.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+        {
+            var body = await res.Content.ReadAsStringAsync(ct);
+            _logger.LogError("Get organization auth failure ({Status}): {Body}", (int)res.StatusCode, body);
+            return null;
+        }
+
+        var error = await res.Content.ReadAsStringAsync(ct);
+        throw new HttpRequestException($"Get organization failed. Status={(int)res.StatusCode}. Body={error}");
+    }
+
+    public async Task<IReadOnlyList<LocaGuestOrganizationListItemDto>> GetOrganizationsAsync(CancellationToken ct = default)
+    {
+        var token = await _machineTokenProvider.GetProvisioningTokenAsync(ct);
+
+        using var msg = new HttpRequestMessage(HttpMethod.Get, "api/provisioning/organizations");
+        PropagateCorrelationId(msg);
+        msg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        using var res = await _http.SendAsync(msg, ct);
+
+        if (res.IsSuccessStatusCode)
+        {
+            var items = await res.Content.ReadFromJsonAsync<List<LocaGuestOrganizationListItemDto>>(cancellationToken: ct);
+            return items ?? new List<LocaGuestOrganizationListItemDto>();
+        }
+
+        if (res.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+        {
+            var body = await res.Content.ReadAsStringAsync(ct);
+            _logger.LogError("Get organizations auth failure ({Status}): {Body}", (int)res.StatusCode, body);
+            return Array.Empty<LocaGuestOrganizationListItemDto>();
+        }
+
+        var error = await res.Content.ReadAsStringAsync(ct);
+        throw new HttpRequestException($"Get organizations failed. Status={(int)res.StatusCode}. Body={error}");
+    }
+
     public async Task<ProvisionOrganizationResponse?> ProvisionOrganizationAsync(
         ProvisionOrganizationRequest request,
         CancellationToken ct = default)

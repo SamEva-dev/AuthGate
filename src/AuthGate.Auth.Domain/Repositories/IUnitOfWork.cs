@@ -25,6 +25,10 @@ public interface IUnitOfWork : IDisposable
     /// </summary>
     IRefreshTokenRepository RefreshTokens { get; }
 
+    IUserOrganizationRepository UserOrganizations { get; }
+
+    IUserAppAccessRepository UserAppAccess { get; }
+
     /// <summary>
     /// Gets the audit log repository
     /// </summary>

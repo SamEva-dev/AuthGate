@@ -22,8 +22,9 @@ public class TenantContext : IOrganizationContext
     {
         get
         {
-            // Prefer new organization_id claim (multi-tenant refactor), fallback to legacy tenant_id
-            var organizationIdClaim = _httpContextAccessor.HttpContext?.User?.FindFirst(ClaimNames.OrganizationId)?.Value;
+            // Prefer org_id (token context), fallback to organization_id and legacy tenant_id
+            var organizationIdClaim = _httpContextAccessor.HttpContext?.User?.FindFirst(ClaimNames.OrgId)?.Value
+                ?? _httpContextAccessor.HttpContext?.User?.FindFirst(ClaimNames.OrganizationId)?.Value;
             if (!string.IsNullOrEmpty(organizationIdClaim) && Guid.TryParse(organizationIdClaim, out var orgId))
             {
                 return orgId;

@@ -5,7 +5,10 @@ using AuthGate.Auth.Domain.Entities;
 using AuthGate.Auth.Domain.Repositories;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace AuthGate.Auth.Application.Features.Auth.Commands.Login;
 
@@ -22,6 +25,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<LoginRes
     private readonly IJwtService _jwtService;
     private readonly IUserRoleService _userRoleService;
     private readonly ILogger<LoginCommandHandler> _logger;
+    private readonly IConfiguration _configuration;
 
     public LoginCommandHandler(
         SignInManager<User> signInManager,
@@ -31,7 +35,8 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<LoginRes
         ITrustedDeviceRepository trustedDeviceRepository,
         IJwtService jwtService,
         IUserRoleService userRoleService,
-        ILogger<LoginCommandHandler> logger)
+        ILogger<LoginCommandHandler> logger,
+        IConfiguration configuration)
     {
         _signInManager = signInManager;
         _userManager = userManager;
@@ -41,6 +46,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<LoginRes
         _jwtService = jwtService;
         _userRoleService = userRoleService;
         _logger = logger;
+        _configuration = configuration;
     }
 
     public async Task<Result<LoginResponseDto>> Handle(LoginCommand request, CancellationToken cancellationToken)
@@ -112,6 +118,24 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<LoginRes
                         var trustedRoles = await _userRoleService.GetUserRolesAsync(user);
                         var trustedPermissions = await _userRoleService.GetUserPermissionsAsync(user);
 
+                        var trustedApp = string.IsNullOrWhiteSpace(request.App) ? "locaguest" : request.App.Trim();
+                        var isTrustedPlatformAdmin = trustedRoles.Any(r => string.Equals(r, Domain.Constants.Roles.SuperAdmin, StringComparison.OrdinalIgnoreCase));
+                        if (string.Equals(trustedApp, "manager", StringComparison.OrdinalIgnoreCase) && !isTrustedPlatformAdmin)
+                        {
+                            var hasManagerAccess = await _unitOfWork.UserAppAccess.HasAccessAsync(user.Id, "manager", cancellationToken);
+                            if (!hasManagerAccess)
+                            {
+                                return Result.Failure<LoginResponseDto>("Not allowed for this app");
+                            }
+                        }
+
+                        var pwdChangeRequired = user.MustChangePassword;
+                        var pwdChangeExpired = user.MustChangePasswordBeforeUtc != null && DateTime.UtcNow > user.MustChangePasswordBeforeUtc.Value;
+                        if (pwdChangeExpired)
+                        {
+                            pwdChangeRequired = true;
+                        }
+
                         // Restrict access to Access-Manager-Pro to specific roles only
                         // Allowed: SuperAdmin, TenantOwner
                         if (!trustedRoles.Any(r => string.Equals(r, Domain.Constants.Roles.SuperAdmin, StringComparison.OrdinalIgnoreCase)
@@ -121,20 +145,33 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<LoginRes
                             return Result.Failure<LoginResponseDto>("Access denied");
                         }
 
-                        if (!user.OrganizationId.HasValue || user.OrganizationId.Value == Guid.Empty)
+                        var isSuperAdmin = trustedRoles.Any(r => string.Equals(r, Domain.Constants.Roles.SuperAdmin, StringComparison.OrdinalIgnoreCase));
+
+                        string trustedAccessToken;
+                        if (isSuperAdmin)
                         {
-                            return Result.Failure<LoginResponseDto>("Cannot issue access token without OrganizationId.");
+                            trustedAccessToken = _jwtService.GeneratePlatformAccessToken(user.Id, user.Email!, trustedRoles, trustedPermissions, true, pwdChangeRequired, app: trustedApp);
+                        }
+                        else
+                        {
+                            if (!user.OrganizationId.HasValue || user.OrganizationId.Value == Guid.Empty)
+                            {
+                                return Result.Failure<LoginResponseDto>("Cannot issue access token without OrganizationId.");
+                            }
+
+                            trustedAccessToken = _jwtService.GenerateTenantAccessToken(user.Id, user.Email!, trustedRoles, trustedPermissions, true, user.OrganizationId.Value, pwdChangeRequired, app: trustedApp);
                         }
 
-                        var trustedAccessToken = _jwtService.GenerateAccessToken(user.Id, user.Email!, trustedRoles, trustedPermissions, true, user.OrganizationId.Value);
                         var trustedRefreshToken = _jwtService.GenerateRefreshToken();
                         var trustedJwtId = _jwtService.GetJwtId(trustedAccessToken) ?? Guid.NewGuid().ToString();
+
+                        var trustedRefreshTokenHash = HashRefreshToken(trustedRefreshToken);
                         
                         var trustedRefreshTokenEntity = new Domain.Entities.RefreshToken
                         {
                             Id = Guid.NewGuid(),
                             UserId = user.Id,
-                            Token = trustedRefreshToken,
+                            Token = trustedRefreshTokenHash,
                             JwtId = trustedJwtId,
                             ExpiresAtUtc = DateTime.UtcNow.AddDays(7),
                             CreatedAtUtc = DateTime.UtcNow
@@ -152,7 +189,9 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<LoginRes
                             AccessToken = trustedAccessToken,
                             RefreshToken = trustedRefreshToken,
                             ExpiresIn = 900,
-                            RequiresMfa = false
+                            RequiresMfa = false,
+                            PasswordChangeRequired = pwdChangeRequired,
+                            PasswordChangeBeforeUtc = user.MustChangePasswordBeforeUtc
                         });
                     }
                 }
@@ -188,6 +227,24 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<LoginRes
             var permissions = await _userRoleService.GetUserPermissionsAsync(user);
             _logger.LogDebug("Found {RoleCount} roles and {PermissionCount} permissions", roles.Count(), permissions.Count());
 
+            var app = string.IsNullOrWhiteSpace(request.App) ? "locaguest" : request.App.Trim();
+            var isPlatformAdminRole = roles.Any(r => string.Equals(r, Domain.Constants.Roles.SuperAdmin, StringComparison.OrdinalIgnoreCase));
+            if (string.Equals(app, "manager", StringComparison.OrdinalIgnoreCase) && !isPlatformAdminRole)
+            {
+                var hasManagerAccess = await _unitOfWork.UserAppAccess.HasAccessAsync(user.Id, "manager", cancellationToken);
+                if (!hasManagerAccess)
+                {
+                    return Result.Failure<LoginResponseDto>("Not allowed for this app");
+                }
+            }
+
+            var passwordChangeRequired = user.MustChangePassword;
+            var passwordChangeExpired = user.MustChangePasswordBeforeUtc != null && DateTime.UtcNow > user.MustChangePasswordBeforeUtc.Value;
+            if (passwordChangeExpired)
+            {
+                passwordChangeRequired = true;
+            }
+
             // Restrict access to Access-Manager-Pro to specific roles only
             // Allowed: SuperAdmin, TenantOwner
             if (!roles.Any(r => string.Equals(r, Domain.Constants.Roles.SuperAdmin, StringComparison.OrdinalIgnoreCase)
@@ -199,24 +256,36 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<LoginRes
 
             // Generate tokens (MFA is false here since we passed the check above)
             _logger.LogDebug("Generating access token");
-            if (!user.OrganizationId.HasValue || user.OrganizationId.Value == Guid.Empty)
+
+            string accessToken;
+            if (isPlatformAdminRole)
             {
-                return Result.Failure<LoginResponseDto>("Cannot issue access token without OrganizationId.");
+                accessToken = _jwtService.GeneratePlatformAccessToken(user.Id, user.Email!, roles, permissions, false, passwordChangeRequired, app: app);
+            }
+            else
+            {
+                if (!user.OrganizationId.HasValue || user.OrganizationId.Value == Guid.Empty)
+                {
+                    return Result.Failure<LoginResponseDto>("Cannot issue access token without OrganizationId.");
+                }
+
+                accessToken = _jwtService.GenerateTenantAccessToken(user.Id, user.Email!, roles, permissions, false, user.OrganizationId.Value, passwordChangeRequired, app: app);
             }
 
-            var accessToken = _jwtService.GenerateAccessToken(user.Id, user.Email!, roles, permissions, false, user.OrganizationId.Value);
             _logger.LogDebug("Generating refresh token");
             var refreshToken = _jwtService.GenerateRefreshToken();
             _logger.LogDebug("Extracting JWT ID");
             var jwtId = _jwtService.GetJwtId(accessToken) ?? Guid.NewGuid().ToString();
             _logger.LogDebug("JWT ID: {JwtId}", jwtId);
 
+            var refreshTokenHash = HashRefreshToken(refreshToken);
+
             // Store refresh token (using repository for custom entity)
             var refreshTokenEntity = new Domain.Entities.RefreshToken
             {
                 Id = Guid.NewGuid(),
                 UserId = user.Id,
-                Token = refreshToken,
+                Token = refreshTokenHash,
                 JwtId = jwtId,
                 ExpiresAtUtc = DateTime.UtcNow.AddDays(7),
                 CreatedAtUtc = DateTime.UtcNow
@@ -239,7 +308,9 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<LoginRes
                 AccessToken = accessToken,
                 RefreshToken = refreshToken,
                 ExpiresIn = 900, // 15 minutes
-                RequiresMfa = false
+                RequiresMfa = false,
+                PasswordChangeRequired = passwordChangeRequired,
+                PasswordChangeBeforeUtc = user.MustChangePasswordBeforeUtc
             });
         }
         catch (Exception ex)
@@ -247,5 +318,23 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<LoginRes
             _logger.LogError(ex, "Error during login for {Email}: {Message}", request.Email, ex.Message);
             throw;
         }
+    }
+
+    private string HashRefreshToken(string refreshToken)
+    {
+        var pepper = _configuration["Jwt:RefreshTokenPepper"];
+        if (string.IsNullOrWhiteSpace(pepper))
+        {
+            pepper = _configuration["Security:RefreshTokenPepper"];
+        }
+
+        if (string.IsNullOrWhiteSpace(pepper))
+        {
+            return refreshToken;
+        }
+
+        var input = Encoding.UTF8.GetBytes(refreshToken + pepper);
+        var hash = SHA256.HashData(input);
+        return Convert.ToHexString(hash);
     }
 }

@@ -40,6 +40,9 @@ public class AuthDbContext : IdentityDbContext<
     public DbSet<RecoveryCode> RecoveryCodes => Set<RecoveryCode>();
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
     public DbSet<UserInvitation> UserInvitations => Set<UserInvitation>();
+    public DbSet<UserOrganization> UserOrganizations => Set<UserOrganization>();
+    public DbSet<UserAppAccess> UserAppAccess => Set<UserAppAccess>();
+    public DbSet<ManagerInvitation> ManagerInvitations => Set<ManagerInvitation>();
     public DbSet<TrustedDevice> TrustedDevices => Set<TrustedDevice>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 

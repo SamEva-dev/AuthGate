@@ -90,7 +90,7 @@ public class Startup
             options.AddPolicy("AllowFrontend", policy =>
             {
                 var allowedOrigins = Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? 
-                new[] { "http://localhost:4200", "http://localhost:4300" };
+                new[] { "http://localhost:4200", "http://localhost:4300", "http://localhost:4400" };
                 policy.WithOrigins(allowedOrigins)
                     .AllowAnyMethod()
                     .AllowAnyHeader()
@@ -207,11 +207,12 @@ public class Startup
         var seedRolesConfigured = Configuration.GetValue<bool?>("Identity:SeedRoles");
         var seedRoles = seedRolesConfigured ?? true;
 
-        if (!env.IsDevelopment() && seedRoles)
+        if (env.IsDevelopment() && seedRoles)
         {
             using var scope = app.ApplicationServices.CreateScope();
             var seeder = scope.ServiceProvider.GetRequiredService<AuthGate.Auth.Infrastructure.Persistence.DataSeeding.AuthDbSeeder>();
             seeder.EnsureRolesAndPermissionsAsync().Wait();
+            seeder.EnsurePlatformAdminAsync(Configuration).Wait();
         }
 
         var swaggerEnabled = env.IsDevelopment() || Configuration.GetValue<bool>("Swagger:Enabled");

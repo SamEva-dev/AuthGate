@@ -8,5 +8,12 @@ public interface ILocaGuestProvisioningClient
         ProvisionOrganizationRequest request,
         CancellationToken ct = default);
 
+    Task<LocaGuestOrganizationDetailsDto?> GetOrganizationByIdAsync(
+        Guid organizationId,
+        CancellationToken ct = default);
+
+    Task<IReadOnlyList<LocaGuestOrganizationListItemDto>> GetOrganizationsAsync(
+        CancellationToken ct = default);
+
     Task<bool> HardDeleteOrganizationAsync(Guid organizationId, CancellationToken ct = default);
 }

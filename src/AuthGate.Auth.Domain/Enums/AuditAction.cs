@@ -93,5 +93,7 @@ public enum AuditAction
     /// <summary>
     /// Permission was removed from role
     /// </summary>
-    PermissionRemoved
+    PermissionRemoved,
+
+    OrganizationContextSwitched
 }

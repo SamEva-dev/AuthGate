@@ -16,6 +16,8 @@ public class UnitOfWork : IUnitOfWork
         IRoleRepository roles,
         IPermissionRepository permissions,
         IRefreshTokenRepository refreshTokens,
+        IUserOrganizationRepository userOrganizations,
+        IUserAppAccessRepository userAppAccess,
         IAuditLogRepository auditLogs)
     {
         _context = context;
@@ -24,6 +26,8 @@ public class UnitOfWork : IUnitOfWork
         Roles = roles;
         Permissions = permissions;
         RefreshTokens = refreshTokens;
+        UserOrganizations = userOrganizations;
+        UserAppAccess = userAppAccess;
         AuditLogs = auditLogs;
     }
 
@@ -31,6 +35,8 @@ public class UnitOfWork : IUnitOfWork
     public IRoleRepository Roles { get; }
     public IPermissionRepository Permissions { get; }
     public IRefreshTokenRepository RefreshTokens { get; }
+    public IUserOrganizationRepository UserOrganizations { get; }
+    public IUserAppAccessRepository UserAppAccess { get; }
     public IAuditLogRepository AuditLogs { get; }
 
     public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

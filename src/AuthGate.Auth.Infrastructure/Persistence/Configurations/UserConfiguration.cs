@@ -17,6 +17,16 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.OrganizationId)
             .HasColumnName("organization_id");
 
+        builder.Property(u => u.MustChangePassword)
+            .HasDefaultValue(false)
+            .HasColumnName("must_change_password");
+
+        builder.Property(u => u.MustChangePasswordBeforeUtc)
+            .HasColumnName("must_change_password_before_utc");
+
+        builder.Property(u => u.PasswordLastChangedAtUtc)
+            .HasColumnName("password_last_changed_at_utc");
+
         builder.HasIndex(u => u.OrganizationId);
 
         builder.HasMany(u => u.RefreshTokens)

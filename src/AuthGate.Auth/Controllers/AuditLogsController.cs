@@ -12,6 +12,7 @@ namespace AuthGate.Auth.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
+[Authorize(Policy = "NoPasswordChangeRequired")]
 public class AuditLogsController : ControllerBase
 {
     private readonly IMediator _mediator;

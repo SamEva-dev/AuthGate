@@ -1,4 +1,5 @@
 using FluentValidation;
+using System;
 
 namespace AuthGate.Auth.Application.Features.Auth.Commands.Login;
 
@@ -17,5 +18,11 @@ public class LoginCommandValidator : AbstractValidator<LoginCommand>
         RuleFor(x => x.Password)
             .NotEmpty().WithMessage("Password is required")
             .MinimumLength(6).WithMessage("Password must be at least 6 characters");
+
+        RuleFor(x => x.App)
+            .Must(app => string.IsNullOrWhiteSpace(app)
+                         || string.Equals(app, "locaguest", StringComparison.OrdinalIgnoreCase)
+                         || string.Equals(app, "manager", StringComparison.OrdinalIgnoreCase))
+            .WithMessage("Invalid app. Must be locaguest or manager");
     }
 }

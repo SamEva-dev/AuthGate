@@ -136,6 +136,8 @@ public static class DependencyInjection
         services.AddScoped<IRoleRepository, RoleRepository>();
         services.AddScoped<IPermissionRepository, PermissionRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+        services.AddScoped<IUserOrganizationRepository, UserOrganizationRepository>();
+        services.AddScoped<IUserAppAccessRepository, UserAppAccessRepository>();
         services.AddScoped<IMfaSecretRepository, MfaSecretRepository>();
         services.AddScoped<IRecoveryCodeRepository, RecoveryCodeRepository>();
         services.AddScoped<ITrustedDeviceRepository, TrustedDeviceRepository>();

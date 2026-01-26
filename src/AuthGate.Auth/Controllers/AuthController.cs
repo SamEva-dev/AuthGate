@@ -9,12 +9,21 @@ using AuthGate.Auth.Application.Features.Auth.Commands.RegisterWithTenant;
 using AuthGate.Auth.Application.Features.Auth.Commands.ValidateEmail;
 using AuthGate.Auth.Application.Features.Auth.Commands.Verify2FA;
 using AuthGate.Auth.Application.Features.Auth.Commands.VerifyRecoveryCode;
+using AuthGate.Auth.Application.Common.Interfaces;
+using AuthGate.Auth.Application.Common.Clients;
 using AuthGate.Auth.Domain.Entities;
+using AuthGate.Auth.Domain.Repositories;
+using AuthGate.Auth.Infrastructure.Persistence;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
+using Microsoft.Extensions.Configuration;
+using System.Text.Json;
 
 namespace AuthGate.Auth.Controllers;
 
@@ -29,17 +38,38 @@ public class AuthController : ControllerBase
     private readonly ILogger<AuthController> _logger;
     private readonly UserManager<User> _userManager;
     private readonly RoleManager<Role> _roleManager;
+    private readonly IJwtService _jwtService;
+    private readonly IUserRoleService _userRoleService;
+    private readonly IUnitOfWork _unitOfWork;
+    private readonly AuthDbContext _db;
+    private readonly IConfiguration _configuration;
+    private readonly IAuditService _auditService;
+    private readonly ILocaGuestProvisioningClient _locaGuest;
 
     public AuthController(
         IMediator mediator, 
         ILogger<AuthController> logger,
         UserManager<User> userManager,
-        RoleManager<Role> roleManager)
+        RoleManager<Role> roleManager,
+        IJwtService jwtService,
+        IUserRoleService userRoleService,
+        IUnitOfWork unitOfWork,
+        AuthDbContext db,
+        IConfiguration configuration,
+        IAuditService auditService,
+        ILocaGuestProvisioningClient locaGuest)
     {
         _mediator = mediator;
         _logger = logger;
         _userManager = userManager;
         _roleManager = roleManager;
+        _jwtService = jwtService;
+        _userRoleService = userRoleService;
+        _unitOfWork = unitOfWork;
+        _db = db;
+        _configuration = configuration;
+        _auditService = auditService;
+        _locaGuest = locaGuest;
     }
 
     /// <summary>
@@ -98,11 +128,17 @@ public class AuthController : ControllerBase
 
         if (!user.OrganizationId.HasValue || user.OrganizationId.Value == Guid.Empty)
         {
-            return Ok(new PreLoginResponseDto
+            var roles = await _userManager.GetRolesAsync(user);
+            var isSuperAdmin = roles.Any(r => string.Equals(r, AuthGate.Auth.Domain.Constants.Roles.SuperAdmin, StringComparison.OrdinalIgnoreCase));
+
+            if (!isSuperAdmin)
             {
-                NextStep = "Error",
-                Error = "Account has no organization assigned. Please contact support or use an invitation link."
-            });
+                return Ok(new PreLoginResponseDto
+                {
+                    NextStep = "Error",
+                    Error = "Account has no organization assigned. Please contact support or use an invitation link."
+                });
+            }
         }
 
         return Ok(new PreLoginResponseDto
@@ -300,6 +336,343 @@ public class AuthController : ControllerBase
         return Ok(currentUserDto);
     }
 
+    [HttpGet("me/organizations")]
+    [Authorize]
+    [Authorize(Policy = "NoPasswordChangeRequired")]
+    [ProducesResponseType(typeof(IEnumerable<UserOrganizationDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetMyOrganizations(CancellationToken cancellationToken)
+    {
+        var userId = User.FindFirstValue("sub") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Unauthorized();
+        }
+
+        if (!Guid.TryParse(userId, out var userGuid))
+        {
+            return Unauthorized();
+        }
+
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user == null)
+        {
+            return Unauthorized();
+        }
+
+        var roles = await _userRoleService.GetUserRolesAsync(user);
+        var isPlatformAdmin = roles.Any(r => string.Equals(r, AuthGate.Auth.Domain.Constants.Roles.SuperAdmin, StringComparison.OrdinalIgnoreCase));
+        var isTenantOwnerOrAdmin = roles.Any(r =>
+            string.Equals(r, AuthGate.Auth.Domain.Constants.Roles.TenantOwner, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(r, AuthGate.Auth.Domain.Constants.Roles.TenantAdmin, StringComparison.OrdinalIgnoreCase));
+
+        if (isPlatformAdmin)
+        {
+            var all = await _locaGuest.GetOrganizationsAsync(cancellationToken);
+            var dtosAll = all
+                .Select(o => new UserOrganizationDto
+                {
+                    OrganizationId = o.Id,
+                    Name = o.Name,
+                    Role = AuthGate.Auth.Domain.Constants.Roles.SuperAdmin,
+                    IsDefault = user.OrganizationId.HasValue && user.OrganizationId.Value == o.Id
+                })
+                .OrderBy(x => x.Name)
+                .ToList();
+
+            return Ok(dtosAll);
+        }
+
+        if (isTenantOwnerOrAdmin)
+        {
+            if (!user.OrganizationId.HasValue)
+                return Ok(Array.Empty<UserOrganizationDto>());
+
+            var orgId = user.OrganizationId.Value;
+            string? name = null;
+
+            // Prefer cached display name if present
+            var cached = await _db.UserOrganizations
+                .AsNoTracking()
+                .Where(x => x.UserId == userGuid && x.OrganizationId == orgId)
+                .Select(x => x.OrganizationDisplayName)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (!string.IsNullOrWhiteSpace(cached))
+            {
+                name = cached;
+            }
+            else
+            {
+                try
+                {
+                    var org = await _locaGuest.GetOrganizationByIdAsync(orgId, cancellationToken);
+                    name = org?.Name;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Unable to resolve organization name for {OrganizationId}", orgId);
+                }
+            }
+
+            return Ok(new List<UserOrganizationDto>
+            {
+                new UserOrganizationDto
+                {
+                    OrganizationId = orgId,
+                    Name = name,
+                    Role = roles.FirstOrDefault(),
+                    IsDefault = true
+                }
+            });
+        }
+
+        var links = await _unitOfWork.UserOrganizations.GetByUserIdAsync(userGuid, cancellationToken);
+        var linkList = links.ToList();
+
+        var orgIds = linkList.Select(x => x.OrganizationId).Distinct().ToList();
+
+        var missingNameOrgIds = linkList
+            .Where(x => string.IsNullOrWhiteSpace(x.OrganizationDisplayName))
+            .Select(x => x.OrganizationId)
+            .Distinct()
+            .ToList();
+
+        var lookups = await Task.WhenAll(missingNameOrgIds.Select(async id =>
+        {
+            try
+            {
+                var org = await _locaGuest.GetOrganizationByIdAsync(id, cancellationToken);
+                return (id, name: org?.Name);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Unable to resolve organization name for {OrganizationId}", id);
+                return (id, name: (string?)null);
+            }
+        }));
+
+        var nameById = lookups
+            .Where(x => !string.IsNullOrWhiteSpace(x.name))
+            .ToDictionary(x => x.id, x => x.name!, EqualityComparer<Guid>.Default);
+
+        if (nameById.Count > 0)
+        {
+            var toUpdate = await _db.UserOrganizations
+                .Where(x => x.UserId == userGuid && nameById.Keys.Contains(x.OrganizationId) && x.OrganizationDisplayName == null)
+                .ToListAsync(cancellationToken);
+
+            foreach (var link in toUpdate)
+            {
+                if (nameById.TryGetValue(link.OrganizationId, out var n))
+                    link.OrganizationDisplayName = n;
+            }
+
+            if (toUpdate.Count > 0)
+                await _db.SaveChangesAsync(cancellationToken);
+        }
+
+        var dtos = linkList
+            .Select(x => new UserOrganizationDto
+            {
+                OrganizationId = x.OrganizationId,
+                Name = !string.IsNullOrWhiteSpace(x.OrganizationDisplayName)
+                    ? x.OrganizationDisplayName
+                    : (nameById.TryGetValue(x.OrganizationId, out var n) ? n : null),
+                Role = x.RoleInOrg,
+                IsDefault = user.OrganizationId.HasValue && user.OrganizationId.Value == x.OrganizationId
+            })
+            .ToList();
+
+        return Ok(dtos);
+    }
+
+    [HttpPost("switch-organization")]
+    [Authorize]
+    [ProducesResponseType(typeof(SwitchOrganizationResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> SwitchOrganization([FromBody] SwitchOrganizationRequestDto dto, CancellationToken cancellationToken)
+    {
+        if (dto == null || dto.OrganizationId == Guid.Empty)
+        {
+            return BadRequest(new { error = "organizationId is required" });
+        }
+
+        var pwdClaim = User.FindFirstValue("pwd_change_required");
+        if (!string.IsNullOrWhiteSpace(pwdClaim) && string.Equals(pwdClaim, "true", StringComparison.OrdinalIgnoreCase))
+        {
+            return Forbid();
+        }
+
+        var userId = User.FindFirstValue("sub") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userId) || !Guid.TryParse(userId, out var userGuid))
+        {
+            return Unauthorized();
+        }
+
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user == null)
+        {
+            return Unauthorized();
+        }
+
+        var passwordChangeExpired = user.MustChangePasswordBeforeUtc != null && DateTime.UtcNow > user.MustChangePasswordBeforeUtc.Value;
+        if (user.MustChangePassword || passwordChangeExpired)
+        {
+            return Forbid();
+        }
+
+        var roles = await _userRoleService.GetUserRolesAsync(user);
+        var permissions = await _userRoleService.GetUserPermissionsAsync(user);
+        var isPlatformAdmin = roles.Any(r => string.Equals(r, AuthGate.Auth.Domain.Constants.Roles.SuperAdmin, StringComparison.OrdinalIgnoreCase));
+
+        var fromOrgId = User.FindFirstValue("org_id") ?? User.FindFirstValue("organization_id");
+
+        if (!isPlatformAdmin)
+        {
+            var hasLink = await _unitOfWork.UserOrganizations.ExistsAsync(userGuid, dto.OrganizationId, cancellationToken);
+            if (!hasLink)
+            {
+                return Forbid();
+            }
+        }
+
+        await _unitOfWork.RefreshTokens.RevokeAllUserTokensAsync(userGuid, "Organization context switched", cancellationToken);
+
+        string accessToken;
+        if (isPlatformAdmin)
+        {
+            accessToken = _jwtService.GeneratePlatformAccessToken(user.Id, user.Email!, roles, permissions, user.MfaEnabled, pwdChangeRequired: false, organizationId: dto.OrganizationId);
+        }
+        else
+        {
+            accessToken = _jwtService.GenerateTenantAccessToken(user.Id, user.Email!, roles, permissions, user.MfaEnabled, dto.OrganizationId, pwdChangeRequired: false);
+        }
+
+        var refreshToken = _jwtService.GenerateRefreshToken();
+        var refreshTokenHash = HashRefreshToken(refreshToken);
+        var jwtId = _jwtService.GetJwtId(accessToken) ?? Guid.NewGuid().ToString();
+
+        await _unitOfWork.RefreshTokens.AddAsync(new AuthGate.Auth.Domain.Entities.RefreshToken
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            Token = refreshTokenHash,
+            JwtId = jwtId,
+            ExpiresAtUtc = DateTime.UtcNow.AddDays(7),
+            CreatedAtUtc = DateTime.UtcNow
+        }, cancellationToken);
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        var auditMetadata = JsonSerializer.Serialize(new
+        {
+            fromOrgId,
+            toOrgId = dto.OrganizationId,
+            platform_admin = isPlatformAdmin
+        });
+
+        await _auditService.LogAsync(
+            user.Id,
+            AuthGate.Auth.Domain.Enums.AuditAction.OrganizationContextSwitched,
+            description: "Organization context switched",
+            isSuccess: true,
+            metadata: auditMetadata,
+            cancellationToken: cancellationToken);
+
+        return Ok(new SwitchOrganizationResponseDto
+        {
+            AccessToken = accessToken,
+            RefreshToken = refreshToken,
+            ExpiresIn = 900,
+            OrganizationId = dto.OrganizationId
+        });
+    }
+
+    [HttpPost("clear-organization-context")]
+    [Authorize]
+    [ProducesResponseType(typeof(SwitchOrganizationResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> ClearOrganizationContext(CancellationToken cancellationToken)
+    {
+        var pwdClaim = User.FindFirstValue("pwd_change_required");
+        if (!string.IsNullOrWhiteSpace(pwdClaim) && string.Equals(pwdClaim, "true", StringComparison.OrdinalIgnoreCase))
+        {
+            return Forbid();
+        }
+
+        var userId = User.FindFirstValue("sub") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userId) || !Guid.TryParse(userId, out var userGuid))
+        {
+            return Unauthorized();
+        }
+
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user == null)
+        {
+            return Unauthorized();
+        }
+
+        var passwordChangeExpired = user.MustChangePasswordBeforeUtc != null && DateTime.UtcNow > user.MustChangePasswordBeforeUtc.Value;
+        if (user.MustChangePassword || passwordChangeExpired)
+        {
+            return Forbid();
+        }
+
+        var roles = await _userRoleService.GetUserRolesAsync(user);
+        var permissions = await _userRoleService.GetUserPermissionsAsync(user);
+        var isPlatformAdmin = roles.Any(r => string.Equals(r, AuthGate.Auth.Domain.Constants.Roles.SuperAdmin, StringComparison.OrdinalIgnoreCase));
+        if (!isPlatformAdmin)
+        {
+            return Forbid();
+        }
+
+        await _unitOfWork.RefreshTokens.RevokeAllUserTokensAsync(userGuid, "Organization context cleared", cancellationToken);
+
+        var accessToken = _jwtService.GeneratePlatformAccessToken(user.Id, user.Email!, roles, permissions, user.MfaEnabled, pwdChangeRequired: false);
+        var refreshToken = _jwtService.GenerateRefreshToken();
+        var refreshTokenHash = HashRefreshToken(refreshToken);
+        var jwtId = _jwtService.GetJwtId(accessToken) ?? Guid.NewGuid().ToString();
+
+        await _unitOfWork.RefreshTokens.AddAsync(new AuthGate.Auth.Domain.Entities.RefreshToken
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            Token = refreshTokenHash,
+            JwtId = jwtId,
+            ExpiresAtUtc = DateTime.UtcNow.AddDays(7),
+            CreatedAtUtc = DateTime.UtcNow
+        }, cancellationToken);
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        var fromOrgId = User.FindFirstValue("org_id") ?? User.FindFirstValue("organization_id");
+        var auditMetadata = JsonSerializer.Serialize(new
+        {
+            fromOrgId,
+            toOrgId = (Guid?)null,
+            platform_admin = true
+        });
+
+        await _auditService.LogAsync(
+            user.Id,
+            AuthGate.Auth.Domain.Enums.AuditAction.OrganizationContextSwitched,
+            description: "Organization context cleared",
+            isSuccess: true,
+            metadata: auditMetadata,
+            cancellationToken: cancellationToken);
+
+        return Ok(new SwitchOrganizationResponseDto
+        {
+            AccessToken = accessToken,
+            RefreshToken = refreshToken,
+            ExpiresIn = 900,
+            OrganizationId = null
+        });
+    }
+
     /// <summary>
     /// Invite a collaborator to join the organization
     /// Requires TenantOwner or TenantAdmin role
@@ -373,8 +746,75 @@ public class AuthController : ControllerBase
             return BadRequest(new { error = errors });
         }
 
+        user.MustChangePassword = false;
+        user.MustChangePasswordBeforeUtc = null;
+        user.PasswordLastChangedAtUtc = DateTime.UtcNow;
+        await _userManager.UpdateAsync(user);
+
+        await _unitOfWork.RefreshTokens.RevokeAllUserTokensAsync(user.Id, "Password changed", HttpContext.RequestAborted);
+
+        var roles = await _userRoleService.GetUserRolesAsync(user);
+        var permissions = await _userRoleService.GetUserPermissionsAsync(user);
+
+        var isSuperAdminRole = roles.Any(r => string.Equals(r, AuthGate.Auth.Domain.Constants.Roles.SuperAdmin, StringComparison.OrdinalIgnoreCase));
+        string accessToken;
+        if (isSuperAdminRole)
+        {
+            accessToken = _jwtService.GeneratePlatformAccessToken(user.Id, user.Email!, roles, permissions, user.MfaEnabled, pwdChangeRequired: false);
+        }
+        else
+        {
+            if (!user.OrganizationId.HasValue || user.OrganizationId.Value == Guid.Empty)
+            {
+                return BadRequest(new { error = "Cannot issue access token without OrganizationId." });
+            }
+
+            accessToken = _jwtService.GenerateTenantAccessToken(user.Id, user.Email!, roles, permissions, user.MfaEnabled, user.OrganizationId.Value, pwdChangeRequired: false);
+        }
+
+        var refreshToken = _jwtService.GenerateRefreshToken();
+        var refreshTokenHash = HashRefreshToken(refreshToken);
+        var jwtId = _jwtService.GetJwtId(accessToken) ?? Guid.NewGuid().ToString();
+
+        await _unitOfWork.RefreshTokens.AddAsync(new AuthGate.Auth.Domain.Entities.RefreshToken
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            Token = refreshTokenHash,
+            JwtId = jwtId,
+            ExpiresAtUtc = DateTime.UtcNow.AddDays(7),
+            CreatedAtUtc = DateTime.UtcNow
+        }, HttpContext.RequestAborted);
+
+        await _unitOfWork.SaveChangesAsync(HttpContext.RequestAborted);
+
         _logger.LogInformation("Password changed for user {UserId}", userId);
-        return Ok(new { message = "Password changed successfully" });
+        return Ok(new TokenResponseDto
+        {
+            AccessToken = accessToken,
+            RefreshToken = refreshToken,
+            ExpiresIn = 900,
+            PasswordChangeRequired = false,
+            PasswordChangeBeforeUtc = null
+        });
+    }
+
+    private string HashRefreshToken(string refreshToken)
+    {
+        var pepper = _configuration["Jwt:RefreshTokenPepper"];
+        if (string.IsNullOrWhiteSpace(pepper))
+        {
+            pepper = _configuration["Security:RefreshTokenPepper"];
+        }
+
+        if (string.IsNullOrWhiteSpace(pepper))
+        {
+            return refreshToken;
+        }
+
+        var input = Encoding.UTF8.GetBytes(refreshToken + pepper);
+        var hash = SHA256.HashData(input);
+        return Convert.ToHexString(hash);
     }
 
     /// <summary>

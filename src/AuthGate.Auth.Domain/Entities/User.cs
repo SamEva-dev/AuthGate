@@ -60,6 +60,12 @@ public class User : IdentityUser<Guid>, IAuditableEntity
     /// </summary>
     public Guid? OrganizationId { get; set; }
 
+    public bool MustChangePassword { get; set; }
+
+    public DateTime? MustChangePasswordBeforeUtc { get; set; }
+
+    public DateTime? PasswordLastChangedAtUtc { get; set; }
+
     /// <summary>
     /// Gets or sets the external OAuth provider (google, facebook, etc.)
     /// </summary>
@@ -113,4 +119,6 @@ public class User : IdentityUser<Guid>, IAuditableEntity
     /// Gets or sets the user's password reset tokens
     /// </summary>
     public virtual ICollection<PasswordResetToken> PasswordResetTokens { get; set; } = new List<PasswordResetToken>();
+
+    public virtual ICollection<UserOrganization> UserOrganizations { get; set; } = new List<UserOrganization>();
 }
