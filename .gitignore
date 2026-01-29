@@ -409,3 +409,4 @@ FodyWeavers.xsd
 /src/AuthGate.Auth/Data/AuthGate.db-wal
 /src/AuthGate.Auth/Data/AuthGate.db-shm
 /src/AuthGate.Auth/Data/AuthGateAudit.db
+src/AuthGate.Auth/appsettings.Development.json
