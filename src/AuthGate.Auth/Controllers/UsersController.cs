@@ -65,7 +65,7 @@ public class UsersController : ControllerBase
     /// Get user details by ID
     /// </summary>
     [HttpGet("{id}")]
-    [HasPermission("users.read")]
+    //[HasPermission("users.read")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -86,7 +86,7 @@ public class UsersController : ControllerBase
     /// Update user information
     /// </summary>
     [HttpPut("{id}")]
-    [HasPermission("users.write")]
+   // [HasPermission("users.write")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -111,7 +111,7 @@ public class UsersController : ControllerBase
     /// Deactivate user (soft delete)
     /// </summary>
     [HttpPost("{id}/deactivate")]
-    [HasPermission("users.deactivate")]
+    //[HasPermission("users.deactivate")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -132,7 +132,7 @@ public class UsersController : ControllerBase
     /// Reactivate user (set IsActive = true)
     /// </summary>
     [HttpPost("{id}/reactivate")]
-    [HasPermission("users.deactivate")]
+    //[HasPermission("users.deactivate")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

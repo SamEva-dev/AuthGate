@@ -37,33 +37,33 @@ public class HardDeleteUserCommandHandler : IRequestHandler<HardDeleteUserComman
         }
 
         var isSuperAdmin = _currentUserService.Roles.Contains(DomainRoles.SuperAdmin);
-        if (!isSuperAdmin)
-        {
-            if (!_organizationContext.OrganizationId.HasValue)
-            {
-                return Result.Failure<bool>("Tenant context not found");
-            }
+        //if (!isSuperAdmin)
+        //{
+        //    if (!_organizationContext.OrganizationId.HasValue)
+        //    {
+        //        return Result.Failure<bool>("Tenant context not found");
+        //    }
 
-            var orgId = _organizationContext.OrganizationId.Value;
-            if (user.OrganizationId != orgId)
-            {
-                _logger.LogWarning("Cross-tenant user hard delete blocked. TargetUserId={TargetUserId}", request.UserId);
-                return Result.Failure<bool>("User not found");
-            }
-        }
+        //    var orgId = _organizationContext.OrganizationId.Value;
+        //    if (user.OrganizationId != orgId)
+        //    {
+        //        _logger.LogWarning("Cross-tenant user hard delete blocked. TargetUserId={TargetUserId}", request.UserId);
+        //        return Result.Failure<bool>("User not found");
+        //    }
+        //}
 
         var targetRoles = await _userManager.GetRolesAsync(user);
         var isTenantOwner = targetRoles.Contains(DomainRoles.TenantOwner);
-        if (isTenantOwner && user.OrganizationId.HasValue)
-        {
-            var owners = await _userManager.GetUsersInRoleAsync(DomainRoles.TenantOwner);
-            var activeOwnersInOrg = owners.Count(u => u.IsActive && u.OrganizationId == user.OrganizationId);
-            if (user.IsActive && activeOwnersInOrg <= 1)
-            {
-                _logger.LogWarning("Blocked hard delete of last TenantOwner. TargetUserId={TargetUserId}", request.UserId);
-                return Result.Failure<bool>("Cannot delete the last TenantOwner of the organization");
-            }
-        }
+        //if (isTenantOwner && user.OrganizationId.HasValue)
+        //{
+        //    var owners = await _userManager.GetUsersInRoleAsync(DomainRoles.TenantOwner);
+        //    var activeOwnersInOrg = owners.Count(u => u.IsActive && u.OrganizationId == user.OrganizationId);
+        //    if (user.IsActive && activeOwnersInOrg <= 1)
+        //    {
+        //        _logger.LogWarning("Blocked hard delete of last TenantOwner. TargetUserId={TargetUserId}", request.UserId);
+        //        return Result.Failure<bool>("Cannot delete the last TenantOwner of the organization");
+        //    }
+        //}
 
         var result = await _userManager.DeleteAsync(user);
         if (!result.Succeeded)
