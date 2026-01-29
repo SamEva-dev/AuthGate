@@ -5,6 +5,7 @@ using System.Text.Json;
 using AuthGate.Auth.Application.Common.Clients;
 using AuthGate.Auth.Application.Common.Clients.Models;
 using AuthGate.Auth.Application.Common.Security;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 
@@ -89,6 +90,168 @@ public sealed class LocaGuestProvisioningClient : ILocaGuestProvisioningClient
 
         var error = await res.Content.ReadAsStringAsync(ct);
         throw new HttpRequestException($"Get organizations failed. Status={(int)res.StatusCode}. Body={error}");
+    }
+
+    public async Task<IReadOnlyList<LocaGuestOrganizationSessionDto>> GetOrganizationSessionsAsync(
+        Guid organizationId,
+        CancellationToken ct = default)
+    {
+        if (organizationId == Guid.Empty)
+            return Array.Empty<LocaGuestOrganizationSessionDto>();
+
+        var token = await _machineTokenProvider.GetProvisioningTokenAsync(ct);
+
+        using var msg = new HttpRequestMessage(HttpMethod.Get, $"api/provisioning/organizations/{organizationId:D}/sessions");
+        PropagateCorrelationId(msg);
+        msg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        using var res = await _http.SendAsync(msg, ct);
+
+        if (res.IsSuccessStatusCode)
+        {
+            var items = await res.Content.ReadFromJsonAsync<List<LocaGuestOrganizationSessionDto>>(cancellationToken: ct);
+            return items ?? new List<LocaGuestOrganizationSessionDto>();
+        }
+
+        if (res.StatusCode is HttpStatusCode.NotFound)
+            return Array.Empty<LocaGuestOrganizationSessionDto>();
+
+        if (res.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+        {
+            var body = await res.Content.ReadAsStringAsync(ct);
+            _logger.LogError("Get organization sessions auth failure ({Status}): {Body}", (int)res.StatusCode, body);
+            return Array.Empty<LocaGuestOrganizationSessionDto>();
+        }
+
+        var error = await res.Content.ReadAsStringAsync(ct);
+        throw new HttpRequestException($"Get organization sessions failed. Status={(int)res.StatusCode}. Body={error}");
+    }
+
+    public async Task<LocaGuestOrganizationUsersPagedResultDto?> GetOrganizationUsersAsync(
+        Guid organizationId,
+        int take,
+        int skip,
+        string? query,
+        string? status,
+        CancellationToken ct = default)
+    {
+        if (organizationId == Guid.Empty)
+            return null;
+
+        var token = await _machineTokenProvider.GetProvisioningTokenAsync(ct);
+
+        var qs = new Dictionary<string, string?>
+        {
+            ["take"] = (take <= 0 ? 50 : take).ToString(),
+            ["skip"] = (skip < 0 ? 0 : skip).ToString(),
+            ["query"] = string.IsNullOrWhiteSpace(query) ? null : query,
+            ["status"] = string.IsNullOrWhiteSpace(status) ? null : status,
+        };
+
+        var uri = QueryHelpers.AddQueryString($"api/provisioning/organizations/{organizationId:D}/users", qs);
+
+        using var msg = new HttpRequestMessage(HttpMethod.Get, uri);
+        PropagateCorrelationId(msg);
+        msg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        using var res = await _http.SendAsync(msg, ct);
+
+        if (res.IsSuccessStatusCode)
+        {
+            return await res.Content.ReadFromJsonAsync<LocaGuestOrganizationUsersPagedResultDto>(cancellationToken: ct);
+        }
+
+        if (res.StatusCode is HttpStatusCode.NotFound)
+            return null;
+
+        if (res.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+        {
+            var body = await res.Content.ReadAsStringAsync(ct);
+            _logger.LogError("Get organization users auth failure ({Status}): {Body}", (int)res.StatusCode, body);
+            return null;
+        }
+
+        var error = await res.Content.ReadAsStringAsync(ct);
+        throw new HttpRequestException($"Get organization users failed. Status={(int)res.StatusCode}. Body={error}");
+    }
+
+    public async Task<LocaGuestOrganizationUsersStatsDto?> GetOrganizationUsersStatsAsync(
+        Guid organizationId,
+        CancellationToken ct = default)
+    {
+        if (organizationId == Guid.Empty)
+            return null;
+
+        var token = await _machineTokenProvider.GetProvisioningTokenAsync(ct);
+
+        using var msg = new HttpRequestMessage(HttpMethod.Get, $"api/provisioning/organizations/{organizationId:D}/users/stats");
+        PropagateCorrelationId(msg);
+        msg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        using var res = await _http.SendAsync(msg, ct);
+
+        if (res.IsSuccessStatusCode)
+        {
+            return await res.Content.ReadFromJsonAsync<LocaGuestOrganizationUsersStatsDto>(cancellationToken: ct);
+        }
+
+        if (res.StatusCode is HttpStatusCode.NotFound)
+            return null;
+
+        if (res.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+        {
+            var body = await res.Content.ReadAsStringAsync(ct);
+            _logger.LogError("Get organization user stats auth failure ({Status}): {Body}", (int)res.StatusCode, body);
+            return null;
+        }
+
+        var error = await res.Content.ReadAsStringAsync(ct);
+        throw new HttpRequestException($"Get organization user stats failed. Status={(int)res.StatusCode}. Body={error}");
+    }
+
+    public async Task<LocaGuestPagedResultDto<LocaGuestAuditLogDto>?> GetAuditLogsAsync(
+        int page,
+        int pageSize,
+        Guid? userId,
+        Guid? organizationId,
+        DateTime? fromUtc,
+        DateTime? toUtc,
+        CancellationToken ct = default)
+    {
+        var token = await _machineTokenProvider.GetProvisioningTokenAsync(ct);
+
+        var query = new Dictionary<string, string?>
+        {
+            ["page"] = (page < 1 ? 1 : page).ToString(),
+            ["pageSize"] = (pageSize < 1 ? 50 : pageSize).ToString(),
+            ["userId"] = userId?.ToString("D"),
+            ["organizationId"] = organizationId?.ToString("D"),
+            ["fromUtc"] = fromUtc?.ToString("O"),
+            ["toUtc"] = toUtc?.ToString("O"),
+        };
+
+        var uri = QueryHelpers.AddQueryString("api/provisioning/auditlogs", query);
+
+        using var msg = new HttpRequestMessage(HttpMethod.Get, uri);
+        PropagateCorrelationId(msg);
+        msg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        using var res = await _http.SendAsync(msg, ct);
+
+        if (res.IsSuccessStatusCode)
+        {
+            return await res.Content.ReadFromJsonAsync<LocaGuestPagedResultDto<LocaGuestAuditLogDto>>(cancellationToken: ct);
+        }
+
+        if (res.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+        {
+            var body = await res.Content.ReadAsStringAsync(ct);
+            _logger.LogError("Get audit logs auth failure ({Status}): {Body}", (int)res.StatusCode, body);
+            return null;
+        }
+
+        var error = await res.Content.ReadAsStringAsync(ct);
+        throw new HttpRequestException($"Get audit logs failed. Status={(int)res.StatusCode}. Body={error}");
     }
 
     public async Task<ProvisionOrganizationResponse?> ProvisionOrganizationAsync(

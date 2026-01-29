@@ -14,6 +14,8 @@ using AuthGate.Auth.Middleware;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace AuthGate.Auth;
 
@@ -70,7 +72,13 @@ public class Startup
         services.AddRateLimitingPolicies();
 
         // Controllers
-        services.AddControllers();
+        services.AddControllers()
+            .AddJsonOptions(options =>
+            {
+                options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+                options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
+                options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+            });
 
         services.Configure<AuditRetentionOptions>(Configuration.GetSection("AuditRetention"));
         services.AddHostedService<AuditRetentionHostedService>();
