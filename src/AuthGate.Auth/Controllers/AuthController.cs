@@ -6,7 +6,9 @@ using AuthGate.Auth.Application.Features.Auth.Commands.AcceptLocaGuestInvitation
 using AuthGate.Auth.Application.Features.Auth.Commands.RefreshToken;
 using AuthGate.Auth.Application.Features.Auth.Commands.Register;
 using AuthGate.Auth.Application.Features.Auth.Commands.RegisterWithTenant;
+using AuthGate.Auth.Application.Features.Auth.Commands.ResendConfirmEmail;
 using AuthGate.Auth.Application.Features.Auth.Commands.ValidateEmail;
+using AuthGate.Auth.Application.Features.Auth.Commands.Logout;
 using AuthGate.Auth.Application.Features.Auth.Commands.Verify2FA;
 using AuthGate.Auth.Application.Features.Auth.Commands.VerifyRecoveryCode;
 using AuthGate.Auth.Application.Common.Interfaces;
@@ -24,7 +26,6 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Configuration;
 using System.Text.Json;
-using LocaGuest.Emailing.Abstractions;
 
 namespace AuthGate.Auth.Controllers;
 
@@ -190,44 +191,16 @@ public class AuthController : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> ResendConfirmEmail([FromBody] ResendConfirmEmailRequest request, CancellationToken cancellationToken)
     {
-        var email = (request.Email ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(email))
-            return BadRequest(new { error = "Email is required." });
-
-        var user = await _userManager.FindByEmailAsync(email);
-        if (user == null)
+        var command = new ResendConfirmEmailCommand
         {
-            // Avoid user enumeration
-            return Ok(new { success = true });
-        }
+            Email = request.Email
+        };
 
-        if (user.EmailConfirmed)
+        var result = await _mediator.Send(command, cancellationToken);
+        if (result.IsFailure)
         {
-            return Ok(new { success = true });
+            return BadRequest(new { error = result.Error });
         }
-
-        var confirmToken = await _userManager.GenerateEmailConfirmationTokenAsync(user);
-        var frontendUrl = _configuration["Frontend:ConfirmEmailUrl"] ?? "http://localhost:4200/confirm-email";
-        var verifyUrl = $"{frontendUrl}?token={Uri.EscapeDataString(confirmToken)}&email={Uri.EscapeDataString(user.Email!)}";
-
-        var firstName = user.FirstName ?? string.Empty;
-        var subject = "Vérifiez votre adresse email";
-        var htmlBody = $$"""
-<h2>✉️ Vérification d'email</h2>
-<p>Bonjour {{firstName}},</p>
-<p>Pour finaliser votre inscription, veuillez vérifier votre adresse email en cliquant sur le bouton ci-dessous :</p>
-<p><a href="{{verifyUrl}}">Vérifier mon email</a></p>
-<p>Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.</p>
-""";
-
-        await _emailing.QueueHtmlAsync(
-            toEmail: user.Email!,
-            subject: subject,
-            htmlContent: htmlBody,
-            textContent: null,
-            attachments: null,
-            tags: EmailUseCaseTags.AuthConfirmEmail,
-            cancellationToken: cancellationToken);
 
         return Ok(new { success = true });
     }
@@ -347,7 +320,12 @@ public class AuthController : ControllerBase
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> Logout()
     {
-        // TODO: Implement logout command to revoke refresh token
+        var result = await _mediator.Send(new LogoutCommand(), HttpContext.RequestAborted);
+        if (result.IsFailure)
+        {
+            return Unauthorized(new { error = result.Error });
+        }
+
         return NoContent();
     }
 
