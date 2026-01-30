@@ -4,6 +4,7 @@ using AuthGate.Auth.Application.DTOs.Auth;
 using AuthGate.Auth.Domain.Entities;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace AuthGate.Auth.Application.Features.Auth.Commands.Register;
@@ -14,13 +15,16 @@ namespace AuthGate.Auth.Application.Features.Auth.Commands.Register;
 public class RegisterCommandHandler : IRequestHandler<RegisterCommand, Result<RegisterResponseDto>>
 {
     private readonly UserManager<User> _userManager;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<RegisterCommandHandler> _logger;
 
     public RegisterCommandHandler(
         UserManager<User> userManager,
+        IConfiguration configuration,
         ILogger<RegisterCommandHandler> logger)
     {
         _userManager = userManager;
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -30,8 +34,32 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, Result<Re
         var existingUser = await _userManager.FindByEmailAsync(request.Email);
         if (existingUser != null)
         {
-            _logger.LogWarning("Registration attempt with existing email: {Email}", request.Email);
-            return Result.Failure<RegisterResponseDto>("A user with this email already exists");
+            if (!existingUser.EmailConfirmed && IsUnconfirmedUserExpired(existingUser))
+            {
+                _logger.LogWarning(
+                    "Deleting expired unconfirmed user {UserId} for email {Email} to allow re-registration",
+                    existingUser.Id,
+                    request.Email);
+
+                var deleteResult = await _userManager.DeleteAsync(existingUser);
+                if (!deleteResult.Succeeded)
+                {
+                    var errors = string.Join(", ", deleteResult.Errors.Select(e => e.Description));
+                    _logger.LogWarning(
+                        "Failed to delete expired unconfirmed user for {Email}: {Errors}",
+                        request.Email,
+                        errors);
+                    return Result.Failure<RegisterResponseDto>("A user with this email already exists");
+                }
+
+                existingUser = null;
+            }
+
+            if (existingUser != null)
+            {
+                _logger.LogWarning("Registration attempt with existing email: {Email}", request.Email);
+                return Result.Failure<RegisterResponseDto>("A user with this email already exists");
+            }
         }
 
         // Create new user
@@ -68,5 +96,14 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, Result<Re
         };
 
         return Result.Success(response);
+    }
+
+    private bool IsUnconfirmedUserExpired(User user)
+    {
+        var ttlHours = _configuration.GetValue<int?>("Auth:UnconfirmedAccountTtlHours") ?? 0;
+        if (ttlHours <= 0)
+            return false;
+
+        return user.CreatedAtUtc.AddHours(ttlHours) < DateTime.UtcNow;
     }
 }

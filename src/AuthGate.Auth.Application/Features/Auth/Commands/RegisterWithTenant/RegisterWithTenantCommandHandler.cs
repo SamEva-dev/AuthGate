@@ -63,8 +63,32 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
             var existingUser = await _userManager.FindByEmailAsync(request.Email);
             if (existingUser != null)
             {
-                // Check if account was deactivated (soft deleted)
-                if (!existingUser.IsActive && existingUser.DeactivatedAtUtc.HasValue)
+                if (!existingUser.EmailConfirmed && IsUnconfirmedUserExpired(existingUser))
+                {
+                    _logger.LogWarning(
+                        "Deleting expired unconfirmed user {UserId} for email {Email} to allow re-registration",
+                        existingUser.Id,
+                        request.Email);
+
+                    var deleteResult = await _userManager.DeleteAsync(existingUser);
+                    if (!deleteResult.Succeeded)
+                    {
+                        var errors = string.Join(", ", deleteResult.Errors.Select(e => e.Description));
+                        _logger.LogWarning(
+                            "Failed to delete expired unconfirmed user for {Email}: {Errors}",
+                            request.Email,
+                            errors);
+                        return Result.Failure<RegisterWithTenantResponse>($"User with email '{request.Email}' already exists");
+                    }
+
+                    existingUser = null;
+                }
+
+                if (existingUser == null)
+                {
+                    // expired unconfirmed user deleted -> allow re-registration
+                }
+                else if (!existingUser.IsActive && existingUser.DeactivatedAtUtc.HasValue)
                 {
                     // Reactivate the account
                     _logger.LogInformation("Reactivating previously deactivated account for {Email}", request.Email);
@@ -102,7 +126,10 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
                     });
                 }
                 
-                return Result.Failure<RegisterWithTenantResponse>($"User with email '{request.Email}' already exists");
+                if (existingUser != null)
+                {
+                    return Result.Failure<RegisterWithTenantResponse>($"User with email '{request.Email}' already exists");
+                }
             }
 
             var userId = Guid.NewGuid();
@@ -203,6 +230,15 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
             
             return Result.Failure<RegisterWithTenantResponse>("Registration failed. Please try again.");
         }
+    }
+
+    private bool IsUnconfirmedUserExpired(User user)
+    {
+        var ttlHours = _configuration.GetValue<int?>("Auth:UnconfirmedAccountTtlHours") ?? 0;
+        if (ttlHours <= 0)
+            return false;
+
+        return user.CreatedAtUtc.AddHours(ttlHours) < DateTime.UtcNow;
     }
 
     private async Task RollbackUserAsync(User user)
