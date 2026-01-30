@@ -1,4 +1,3 @@
-using System.Text.Json;
 using AuthGate.Auth.Application.Common;
 using AuthGate.Auth.Application.Common.Interfaces;
 using AuthGate.Auth.Application.Services;
@@ -7,7 +6,6 @@ using Roles = AuthGate.Auth.Domain.Constants.Roles;
 using AuthGate.Auth.Domain.Entities;
 using AuthGate.Auth.Domain.Enums;
 using AuthGate.Auth.Domain.Repositories;
-using LocaGuest.Emailing.Abstractions;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
@@ -29,7 +27,6 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
     private readonly ITokenService _tokenService;
     private readonly IOutboxRepository _outboxRepository;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IEmailingService _emailing;
     private readonly IConfiguration _configuration;
     private readonly ILogger<RegisterWithTenantCommandHandler> _logger;
 
@@ -38,7 +35,6 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
         ITokenService tokenService,
         IOutboxRepository outboxRepository,
         IUnitOfWork unitOfWork,
-        IEmailingService emailing,
         IConfiguration configuration,
         ILogger<RegisterWithTenantCommandHandler> logger)
     {
@@ -46,7 +42,6 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
         _tokenService = tokenService;
         _outboxRepository = outboxRepository;
         _unitOfWork = unitOfWork;
-        _emailing = emailing;
         _configuration = configuration;
         _logger = logger;
     }
@@ -87,6 +82,32 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
                 if (existingUser == null)
                 {
                     // expired unconfirmed user deleted -> allow re-registration
+                }
+                else if (!existingUser.EmailConfirmed)
+                {
+                    var resendOutboxMessage = OutboxMessage.Create(
+                        OutboxMessageType.SendConfirmEmail,
+                        "{}",
+                        existingUser.Id,
+                        Guid.NewGuid().ToString("N")
+                    );
+
+                    await _outboxRepository.AddAsync(resendOutboxMessage, cancellationToken);
+                    await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+                    return Result<RegisterWithTenantResponse>.Success(new RegisterWithTenantResponse
+                    {
+                        UserId = existingUser.Id,
+                        Email = existingUser.Email ?? request.Email,
+                        OrganizationId = existingUser.OrganizationId,
+                        OrganizationCode = null,
+                        OrganizationName = request.OrganizationName,
+                        AccessToken = string.Empty,
+                        RefreshToken = string.Empty,
+                        Role = AuthGate.Auth.Domain.Constants.Roles.TenantOwner,
+                        Status = "pending_email_confirmation",
+                        Message = "Veuillez confirmer votre adresse email pour finaliser votre inscription."
+                    });
                 }
                 else if (!existingUser.IsActive && existingUser.DeactivatedAtUtc.HasValue)
                 {
@@ -134,7 +155,7 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
 
             var userId = Guid.NewGuid();
 
-            // 2. Create User in AuthGate with PendingProvisioning status
+            // 2. Create User in AuthGate with PendingEmailConfirmation status
             var user = new User
             {
                 Id = userId,
@@ -145,8 +166,10 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
                 LastName = request.LastName,
                 OrganizationId = null, // Will be set after async provisioning
                 IsActive = false,
-                Status = UserStatus.PendingProvisioning,
+                Status = UserStatus.PendingEmailConfirmation,
                 MfaEnabled = false,
+                PendingOrganizationName = request.OrganizationName,
+                PendingOrganizationPhone = request.Phone,
                 CreatedAtUtc = DateTime.UtcNow
             };
 
@@ -174,23 +197,10 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
                 return Result.Failure<RegisterWithTenantResponse>($"Failed to assign role: {roleErrors}");
             }
 
-            // 4. Generate JWT BEFORE saving outbox (use pending provisioning tokens)
-            var (accessToken, refreshToken) = await _tokenService.GeneratePendingProvisioningTokensAsync(user);
-
-            // 5. Create OutboxMessage for async organization provisioning
-            var payload = new ProvisionOrganizationPayload
-            {
-                UserId = userId,
-                Email = request.Email,
-                OrganizationName = request.OrganizationName,
-                Phone = request.Phone,
-                FirstName = request.FirstName,
-                LastName = request.LastName
-            };
-
+            // 4. Create OutboxMessage for async confirmation email sending
             var outboxMessage = OutboxMessage.Create(
-                OutboxMessageType.ProvisionOrganization,
-                JsonSerializer.Serialize(payload),
+                OutboxMessageType.SendConfirmEmail,
+                "{}",
                 userId,
                 Guid.NewGuid().ToString("N") // CorrelationId for tracing
             );
@@ -199,7 +209,7 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             _logger.LogInformation(
-                "User created with pending provisioning: {UserId} - {Email}. OutboxMessage: {OutboxId}",
+                "User created with pending email confirmation: {UserId} - {Email}. OutboxMessage: {OutboxId}",
                 user.Id, user.Email, outboxMessage.Id);
 
             var responseDto = new RegisterWithTenantResponse
@@ -209,11 +219,11 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
                 OrganizationId = null, // Not yet provisioned
                 OrganizationCode = null,
                 OrganizationName = request.OrganizationName, // Show requested name
-                AccessToken = accessToken,
-                RefreshToken = refreshToken,
+                AccessToken = string.Empty,
+                RefreshToken = string.Empty,
                 Role = AuthGate.Auth.Domain.Constants.Roles.TenantOwner,
-                Status = "pending_provisioning",
-                Message = "Your account is being set up. You'll have full access shortly."
+                Status = "pending_email_confirmation",
+                Message = "Veuillez confirmer votre adresse email pour finaliser votre inscription."
             };
 
             return Result<RegisterWithTenantResponse>.Success(responseDto);

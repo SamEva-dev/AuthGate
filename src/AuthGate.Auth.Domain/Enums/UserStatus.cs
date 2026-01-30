@@ -6,6 +6,11 @@ namespace AuthGate.Auth.Domain.Enums;
 public enum UserStatus
 {
     /// <summary>
+    /// User is pending email confirmation
+    /// </summary>
+    PendingEmailConfirmation = -1,
+
+    /// <summary>
     /// User is pending organization provisioning (registration in progress)
     /// </summary>
     PendingProvisioning = 0,

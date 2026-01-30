@@ -93,6 +93,27 @@ public class OutboxProcessorService : BackgroundService
                     _logger.LogError(
                         "Outbox message {MessageId} permanently failed after {MaxRetries} retries. MANUAL INTERVENTION REQUIRED.",
                         message.Id, message.MaxRetries);
+
+                    if (message.Type == OutboxMessageType.ProvisionOrganization
+                        && message.RelatedEntityId.HasValue
+                        && message.RelatedEntityId.Value != Guid.Empty)
+                    {
+                        try
+                        {
+                            var userManager = scope.ServiceProvider.GetRequiredService<UserManager<User>>();
+                            var user = await userManager.FindByIdAsync(message.RelatedEntityId.Value.ToString("D"));
+                            if (user != null)
+                            {
+                                user.Status = UserStatus.ProvisioningFailed;
+                                user.IsActive = false;
+                                await userManager.UpdateAsync(user);
+                            }
+                        }
+                        catch (Exception updateEx)
+                        {
+                            _logger.LogWarning(updateEx, "Failed to mark user provisioning as failed for outbox message {MessageId}", message.Id);
+                        }
+                    }
                 }
             }
 
@@ -109,6 +130,10 @@ public class OutboxProcessorService : BackgroundService
     {
         switch (message.Type)
         {
+            case OutboxMessageType.SendConfirmEmail:
+                await ProcessSendConfirmEmailAsync(serviceProvider, message, cancellationToken);
+                break;
+
             case OutboxMessageType.ProvisionOrganization:
                 await ProcessProvisionOrganizationAsync(serviceProvider, message, cancellationToken);
                 break;
@@ -136,9 +161,7 @@ public class OutboxProcessorService : BackgroundService
 
         var provisioningClient = serviceProvider.GetRequiredService<ILocaGuestProvisioningClient>();
         var userManager = serviceProvider.GetRequiredService<UserManager<User>>();
-        var dbContext = serviceProvider.GetRequiredService<AuthDbContext>();
-        var configuration = serviceProvider.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>();
-        var emailing = serviceProvider.GetRequiredService<IEmailingService>();
+        serviceProvider.GetRequiredService<AuthDbContext>();
 
         // 1. Call LocaGuest API to create Organization
         var orgRequest = new ProvisionOrganizationRequest
@@ -168,6 +191,11 @@ public class OutboxProcessorService : BackgroundService
             throw new InvalidOperationException($"User {payload.UserId} not found");
         }
 
+        if (!user.EmailConfirmed)
+        {
+            throw new InvalidOperationException($"User {payload.UserId} email is not confirmed");
+        }
+
         user.OrganizationId = provisioned.OrganizationId;
         user.Status = UserStatus.Active;
         user.IsActive = true;
@@ -182,6 +210,33 @@ public class OutboxProcessorService : BackgroundService
         _logger.LogInformation(
             "User {UserId} activated with organization {OrganizationId}",
             user.Id, provisioned.OrganizationId);
+    }
+
+    private async Task ProcessSendConfirmEmailAsync(
+        IServiceProvider serviceProvider,
+        OutboxMessage message,
+        CancellationToken cancellationToken)
+    {
+        var userManager = serviceProvider.GetRequiredService<UserManager<User>>();
+        var configuration = serviceProvider.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>();
+        var emailing = serviceProvider.GetRequiredService<IEmailingService>();
+
+        var userId = message.RelatedEntityId;
+        if (userId == null || userId.Value == Guid.Empty)
+        {
+            throw new InvalidOperationException($"Outbox message {message.Id} has no RelatedEntityId");
+        }
+
+        var user = await userManager.FindByIdAsync(userId.Value.ToString("D"));
+        if (user == null)
+        {
+            throw new InvalidOperationException($"User {userId} not found");
+        }
+
+        if (user.EmailConfirmed)
+        {
+            return;
+        }
 
         var confirmToken = await userManager.GenerateEmailConfirmationTokenAsync(user);
         var frontendUrl = configuration["Frontend:ConfirmEmailUrl"] ?? "http://localhost:4200/confirm-email";

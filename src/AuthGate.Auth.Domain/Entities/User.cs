@@ -60,6 +60,10 @@ public class User : IdentityUser<Guid>, IAuditableEntity
     /// </summary>
     public Guid? OrganizationId { get; set; }
 
+    public string? PendingOrganizationName { get; set; }
+
+    public string? PendingOrganizationPhone { get; set; }
+
     public bool MustChangePassword { get; set; }
 
     public DateTime? MustChangePasswordBeforeUtc { get; set; }
