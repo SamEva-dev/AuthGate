@@ -1,4 +1,6 @@
 using AuthGate.Auth.Application.Common;
+using AuthGate.Auth.Application.Common.Clients;
+using AuthGate.Auth.Application.Common.Clients.Models;
 using AuthGate.Auth.Application.Common.Interfaces;
 using AuthGate.Auth.Application.Services;
 using AuthGate.Auth.Domain.Constants;
@@ -25,6 +27,7 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
 {
     private readonly UserManager<User> _userManager;
     private readonly ITokenService _tokenService;
+    private readonly ILocaGuestProvisioningClient _provisioningClient;
     private readonly IOutboxRepository _outboxRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IConfiguration _configuration;
@@ -33,6 +36,7 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
     public RegisterWithTenantCommandHandler(
         UserManager<User> userManager,
         ITokenService tokenService,
+        ILocaGuestProvisioningClient provisioningClient,
         IOutboxRepository outboxRepository,
         IUnitOfWork unitOfWork,
         IConfiguration configuration,
@@ -40,6 +44,7 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
     {
         _userManager = userManager;
         _tokenService = tokenService;
+        _provisioningClient = provisioningClient;
         _outboxRepository = outboxRepository;
         _unitOfWork = unitOfWork;
         _configuration = configuration;
@@ -79,11 +84,7 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
                     existingUser = null;
                 }
 
-                if (existingUser == null)
-                {
-                    // expired unconfirmed user deleted -> allow re-registration
-                }
-                else if (!existingUser.EmailConfirmed)
+                if (existingUser != null && !existingUser.EmailConfirmed)
                 {
                     var resendOutboxMessage = OutboxMessage.Create(
                         OutboxMessageType.SendConfirmEmail,
@@ -153,20 +154,22 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
                 }
             }
 
+            var requireEmailConfirmation = _configuration.GetValue<bool?>("Auth:RequireEmailConfirmation") ?? true;
+
             var userId = Guid.NewGuid();
 
-            // 2. Create User in AuthGate with PendingEmailConfirmation status
+            // 2. Create User in AuthGate
             var user = new User
             {
                 Id = userId,
                 UserName = request.Email,
                 Email = request.Email,
-                EmailConfirmed = false,
+                EmailConfirmed = !requireEmailConfirmation,
                 FirstName = request.FirstName,
                 LastName = request.LastName,
                 OrganizationId = null, // Will be set after async provisioning
-                IsActive = false,
-                Status = UserStatus.PendingEmailConfirmation,
+                IsActive = !requireEmailConfirmation,
+                Status = requireEmailConfirmation ? UserStatus.PendingEmailConfirmation : UserStatus.PendingProvisioning,
                 MfaEnabled = false,
                 PendingOrganizationName = request.OrganizationName,
                 PendingOrganizationPhone = request.Phone,
@@ -195,6 +198,56 @@ public class RegisterWithTenantCommandHandler : IRequestHandler<RegisterWithTena
                 // Rollback user creation
                 await RollbackUserAsync(createdUser);
                 return Result.Failure<RegisterWithTenantResponse>($"Failed to assign role: {roleErrors}");
+            }
+
+            if (!requireEmailConfirmation)
+            {
+                var orgRequest = new ProvisionOrganizationRequest
+                {
+                    OrganizationName = request.OrganizationName,
+                    OrganizationEmail = request.Email,
+                    OrganizationPhone = request.Phone,
+                    OwnerUserId = user.Id.ToString("D"),
+                    OwnerEmail = request.Email
+                };
+
+                var provisioned = await _provisioningClient.ProvisionOrganizationAsync(orgRequest, cancellationToken);
+                if (provisioned == null)
+                {
+                    await RollbackUserAsync(createdUser);
+                    return Result.Failure<RegisterWithTenantResponse>("Registration failed. Please try again.");
+                }
+
+                user.OrganizationId = provisioned.OrganizationId;
+                user.IsActive = true;
+                user.Status = UserStatus.Active;
+                user.PendingOrganizationName = null;
+                user.PendingOrganizationPhone = null;
+
+                var updateResult = await _userManager.UpdateAsync(user);
+                if (!updateResult.Succeeded)
+                {
+                    var errors = string.Join(", ", updateResult.Errors.Select(e => e.Description));
+                    await RollbackUserAsync(createdUser);
+                    return Result.Failure<RegisterWithTenantResponse>($"Failed to update user: {errors}");
+                }
+
+                var tokens = await _tokenService.GenerateTokensAsync(user);
+                var userRoles = await _userManager.GetRolesAsync(user);
+
+                return Result<RegisterWithTenantResponse>.Success(new RegisterWithTenantResponse
+                {
+                    UserId = user.Id,
+                    Email = user.Email!,
+                    OrganizationId = user.OrganizationId,
+                    OrganizationCode = provisioned.Code,
+                    OrganizationName = provisioned.Name,
+                    AccessToken = tokens.AccessToken,
+                    RefreshToken = tokens.RefreshToken,
+                    Role = userRoles.FirstOrDefault() ?? AuthGate.Auth.Domain.Constants.Roles.TenantOwner,
+                    Status = "active",
+                    Message = "Votre compte a été créé."
+                });
             }
 
             // 4. Create OutboxMessage for async confirmation email sending

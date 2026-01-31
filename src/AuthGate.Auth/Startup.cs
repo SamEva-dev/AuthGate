@@ -82,6 +82,9 @@ public class Startup
 
         services.Configure<AuditRetentionOptions>(Configuration.GetSection("AuditRetention"));
         services.AddHostedService<AuditRetentionHostedService>();
+
+        services.Configure<UnconfirmedAccountCleanupOptions>(Configuration.GetSection("UnconfirmedAccountCleanup"));
+        services.AddHostedService<UnconfirmedAccountCleanupHostedService>();
         
         // Outbox Processor for reliable async operations (Registration, etc.)
         services.Configure<OutboxProcessorOptions>(Configuration.GetSection(OutboxProcessorOptions.SectionName));
