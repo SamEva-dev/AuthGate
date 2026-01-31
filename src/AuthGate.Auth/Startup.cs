@@ -203,7 +203,7 @@ public class Startup
     {
         EnsureAuthGateLogDirectories();
         // Seed database in development
-        if (env.IsDevelopment())
+        if (env.IsDevelopment() || env.IsDevelopment())
         {
             using var scope = app.ApplicationServices.CreateScope();
             var seeder = scope.ServiceProvider.GetRequiredService<AuthGate.Auth.Infrastructure.Persistence.DataSeeding.AuthDbSeeder>();
@@ -215,7 +215,7 @@ public class Startup
         var seedRolesConfigured = Configuration.GetValue<bool?>("Identity:SeedRoles");
         var seedRoles = seedRolesConfigured ?? true;
 
-        if (env.IsDevelopment() && seedRoles)
+        if ((env.IsDevelopment() || env.IsDevelopment()) && seedRoles)
         {
             using var scope = app.ApplicationServices.CreateScope();
             var seeder = scope.ServiceProvider.GetRequiredService<AuthGate.Auth.Infrastructure.Persistence.DataSeeding.AuthDbSeeder>();
