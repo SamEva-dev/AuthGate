@@ -37,7 +37,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="LocaGuest.Emailing" Version="1.0.0" />
+    <PackageReference Include="LocaGuest.Emailing" Version="1.0.4" />
   </ItemGroup>
 
   <ItemGroup>

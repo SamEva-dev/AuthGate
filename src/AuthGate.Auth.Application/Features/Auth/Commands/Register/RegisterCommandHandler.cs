@@ -100,10 +100,12 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, Result<Re
 
     private bool IsUnconfirmedUserExpired(User user)
     {
-        var ttlHours = _configuration.GetValue<int?>("Auth:UnconfirmedAccountTtlHours") ?? 0;
-        if (ttlHours <= 0)
+        var ttlMinutes = _configuration.GetValue<int?>("Auth:UnconfirmedAccountTtlMinutes")
+            ?? ((_configuration.GetValue<int?>("Auth:UnconfirmedAccountTtlHours") ?? 0) * 60);
+
+        if (ttlMinutes <= 0)
             return false;
 
-        return user.CreatedAtUtc.AddHours(ttlHours) < DateTime.UtcNow;
+        return user.CreatedAtUtc.AddMinutes(ttlMinutes) < DateTime.UtcNow;
     }
 }
